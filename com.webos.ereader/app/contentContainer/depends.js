@@ -1,0 +1,11 @@
+﻿enyo.depends(
+	"ListView.js",
+	"ListView.css",
+	"ContextView.js",
+	"ContextView.css",
+	"GridView.js",
+	"GridView.css",
+	"Main.js",
+	"Main.css",
+	"../common/BookData.js"
+);

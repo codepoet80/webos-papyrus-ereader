@@ -1,0 +1,27 @@
+/* 
+    Document   : TableOfContentsPanel
+    Created on : Dec 7, 2010, 4:41:14 PM
+    Author     : Serge
+    Description:
+        Purpose of the stylesheet follows.
+*/
+
+/* 
+   TODO customize this sample style
+   Syntax recommendation http://www.w3.org/TR/REC-CSS2/
+*/
+
+root { 
+    display: block;
+}
+
+.tocBtn {
+    
+}
+
+.tocBtnOver {
+    background-color: white;
+    color: white;
+    left: 50px;
+    position: absolute;
+}

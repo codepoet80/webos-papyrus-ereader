@@ -1,0 +1,12 @@
+{
+	"id": "com.webos.ereader",
+	"version": "1.0.0",
+	"vendor": "Open Source",
+	"type": "web",
+	"main": "index.html",
+	"title": "E-Reader",
+	"icon": "icon.png",
+	"splashicon": "icon-256x256.png",
+	"uiRevision": 2,
+	"mimeTypes": [{"extension": "epub", "mime": "application/epub+zip"}]
+}

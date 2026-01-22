@@ -1,0 +1,151 @@
+.kindle-panel {
+	
+}
+
+.library-panel .enyo-bg {
+	background: #111;
+}
+
+.content-panel .enyo-bg {
+	background: #111;
+}
+
+.slideout-panel {
+/*	background: #f0eee8 url('../../images/library-background.png');
+	-webkit-box-shadow: #444 0 0 16px; */
+    height: 100%;
+    width: 100%;
+}
+
+.slide-button {
+	position: absolute; 
+	bottom: 0; 
+	width: 50px; 
+	height: 50px;
+	opacity: 0.8; 
+	z-index: 15;
+}
+
+.info-container {
+	/* box-shadow not supported 
+	-webkit-box-shadow: rgba(0,0,0,.2) 0 -2px 2px;
+	*/
+}
+.tab-box-shadow {
+	height: 6px;
+	width: 100%;
+	background: url(../../images/tab-container-shadow.png) right bottom repeat-x;
+	/* -webkit-border-image: url(../../images/tab-container-shadow.png) 0 0 5 0;
+	border-width: 0 0 6px 0; */
+	margin-top: -6px;
+	z-index:1;
+	position:absolute;
+}
+
+
+
+/* Book Info Panel with tabs */
+
+.bookinfo-panel .tab-container {
+	background: #c4beb4;
+}
+
+.tab-container .enyo-radiogroup {
+	margin: 0 0;
+}
+
+.bookinfo-panel {
+	background-color: #e4e0d8;
+}
+
+.bookinfo-panel .enyo-radiobutton  {
+	/* height: 50px; */
+	/* padding: 0 0 8px; */
+	position:relative;
+}
+
+.tab-label {
+	padding-top:22px;
+	/* font-weight: bold;
+	line-height: 16px; */
+}
+
+.bookinfo-panel .enyo-radiobutton .enyo-button-icon {
+	/* margin: 0px 0 0 -17px; */
+	background-position: 5px 0px;
+	/* height:32px; */
+	/* padding: 15px 0; */
+	position:absolute;
+	left: -5px;
+}
+
+.tab-label .enyo-button-icon-text {
+	display:inline;	
+	margin-left:25px;
+	padding-right:5px;
+}
+
+.bookinfo-panel .enyo-radiobutton div {
+	display: inline-block;
+	/* margin-top: -10px; */
+	z-index:9;
+}
+
+.bookinfo-panel .enyo-radiobutton,
+.bookinfo-panel .enyo-radiobutton.enyo-button-depressed, 
+.bookinfo-panel .enyo-radiobutton.enyo-button-down {
+	position:relative;
+	/* height:41px; */
+}
+
+.bookinfo-panel .enyo-radiobutton,
+.bookinfo-panel .enyo-radiobutton.enyo-button-down,
+.bookinfo-panel .enyo-radiobutton-first,
+.bookinfo-panel .enyo-radiobutton-last {
+	/* -webkit-border-image: url(../../images/tab.png) 63 19 50 19; */
+	-webkit-border-image: url(../../images/tab.png) 0 19 100 19;
+	/* border-width: 0 19px; */
+
+}
+
+.bookinfo-panel .enyo-radiobutton.enyo-button-depressed {
+	z-index:10;
+	-webkit-border-image: url(../../images/tab.png) 60 19 40 19;	
+	/*-webkit-border-image: url(../../images/tab.png) 0 19 100 19; */
+}
+
+.bookinfo-panel .enyo-radiobutton,
+.bookinfo-panel .enyo-radiobutton.enyo-first,
+.bookinfo-panel .enyo-radiobutton.enyo-last {
+	
+}
+
+.bookinfo-panel .enyo-radiobutton.enyo-last {
+	 margin-left: -2px;
+}
+
+/* CoverView */
+.coverView-book-nocover {
+	z-index: 4;
+    overflow: hidden;
+	text-align: center;
+    vertical-align: middle;
+	position: absolute;
+	top: 310px;
+	left:88px;
+	width:317px;
+    max-width: 317px;
+    word-wrap: normal;
+	height:569px;
+	padding: 0px 20px 0px 20px;
+	color: #CCC6B9;
+    font-family: "PreludeWGL";
+	font-size: 22px;
+	font-weight: bold;
+}
+
+.no-marks-indicator {
+    position: absolute;
+    left: 67px;
+    top: 340px;
+}

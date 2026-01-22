@@ -1,0 +1,18 @@
+.filter-selected {
+	background: url('../images/item-menu-checkmark.png') no-repeat 90% 50%;
+}
+
+.spinner-popup {
+	min-width: 0;
+	-webkit-border-image: none;
+}
+
+.aboutTitle {
+	font-weight: bold;
+	font-size: 20px;
+}
+
+.versText {
+	font-weight: bold;
+	font-size: 16px;
+}

@@ -1,0 +1,300 @@
+/**
+ * ereader.BookReader - Book reader view
+ *
+ * Simplified version that removes MojoDB and Amazon dependencies.
+ */
+enyo.kind({
+	name: "ereader.BookReader",
+	kind: "Control",
+	events: {
+		onLibrarySelected: "",
+		onSlideOutSelected: "",
+		onSearchQueried: "",
+		onReaderReady: "",
+		onLocalPositionUpdated: ""
+	},
+	className: "book-reader-main white",
+	components: [
+		{name: "top_row", kind: "ereader.top_row", className: "top-row-controls", onPageManipulation: "doPageManipulation", onLibrarySelected: "handleLibrarySelected", onSearchQueried: "handleSearchQueried", onBrightnessChanged: "handleBrightnessChanged", showing: false, onTypeSelection: "handleTypeSelection", onFontSizeChanged: "handleFontSizeChanged", onReaderThemeChanged: "handleReaderThemeChanged", onclick: "setHideOnceOne", onSearchBoxCollapsed: "setHideOnceTwo"},
+		{kind: "ereader.reading.DogEarButton", name: "readerDogear", onclick: "handleDogear", className: "reader-dogear", showing: false},
+		{name: "body", kind: "ereader.body", onmousedown: "handleMouseDown", style: "position: absolute; top: 0px; left: 0px; z-index: 50; width: 100%; height: 100%;", onTocAvailableChanged: "handleTocAvailableChanged", onPluginReady: "handlePluginReady", onBookmarkUpdated: "updateBookmarks", onLocationChanged: "handleLocationChanged", onShowOverlays: "showOverlays", onPluginStarted: "handlePluginStarted", onNotesShowingChanged: "handleNoteShowingChanged", onEndOfBook: "handleEndOfBook"},
+		{name: "bottom_row", kind: "ereader.bottom_row", className: "bottom-row-controls", onSlideOutSelected: "handleSlideOutSelected", onclick: "setHideOnceOne", showing: false, onLocationSelected: "handleLocationSelected", onTOCSelected: "handleTOCSelected", onPreviousLocationSelected: "handlePrevLocSelected"},
+		{name: "dimCover", className: "dimCover", onclick: "handleDismissSlideout", showing: false}
+	],
+
+	pluginReady: false,
+	pluginStarted: false,
+	bookData: null,
+
+	create: function() {
+		this.inherited(arguments);
+	},
+
+	doPageManipulation: function(inSender, action) {
+		this.$.body.doChangePage(action);
+	},
+
+	handleSearchQueried: function(inSender, searchText) {
+		this.doSearchQueried(searchText);
+	},
+
+	handleSlideOutSelected: function(inSender, show) {
+		this.doSlideOutSelected(show);
+	},
+
+	handleDismissSlideout: function() {
+		this.owner.handleSlideoutDismissal();
+	},
+
+	handleLibrarySelected: function() {
+		this.log("BookReader: handleLibrarySelected called");
+		if (this.pluginReady) {
+			this.saveReadingPosition();
+		}
+		this.pluginStarted = false;
+		this.pluginReady = false;
+		this.$.readerDogear.hide();
+		this.$.readerDogear.toggle(false);
+		this.$.body.closePopups();
+		this.$.body.clearNotes();
+		this.log("BookReader: firing doLibrarySelected");
+		this.doLibrarySelected();
+	},
+
+	openBook: function(bookData) {
+		this.log(JSON.stringify(bookData));
+		this.bookData = bookData;
+
+		this.$.top_row.$.bookTitle.setContent(bookData.title);
+		this.$.bottom_row.setTotalLocations(bookData.locationsTotal || 10000);
+		this.$.bottom_row.setLocationInfo(bookData.locationsCompleted || 0);
+		this.$.bottom_row.setShowing(false);
+		this.$.top_row.setShowing(false);
+		this.$.body.currentBook = bookData;
+		this.disableHistoryBack();
+
+		// Initialize the book in the body component
+		this.$.body.initializeWithBook(bookData);
+	},
+
+	handlePluginReady: function() {
+		this.log();
+		this.pluginReady = true;
+		this.overlaysShowing = false;
+		this.showOverlays();
+		this.doReaderReady();
+	},
+
+	handlePluginStarted: function() {
+		this.pluginStarted = true;
+	},
+
+	handleTocAvailableChanged: function(inSender, available) {
+		this.$.bottom_row.setTocAvailable(available);
+	},
+
+	handleLocationChanged: function(inSender, locStart, locEnd, totalLoc, posStart, posEnd) {
+		this.currentLocStart = locStart;
+		this.currentLocEnd = locEnd;
+		this.currentPosStart = posStart;
+		this.currentPosEnd = posEnd;
+
+		this.$.bottom_row.setLocationInfo(locStart);
+		this.doLocalPositionUpdated(locStart);
+	},
+
+	showOverlays: function(inSender, hideOnce) {
+		if (!this.pluginReady) return;
+
+		if (this.overlaysShowing && !hideOnce) {
+			this.hideOverlays();
+		} else if (!this.hideOnce) {
+			this.overlaysShowing = true;
+			this.$.top_row.show();
+			this.$.bottom_row.show();
+			this.$.readerDogear.show();
+			this.$.body.overlayStateChange("showing");
+		}
+		this.hideOnce = false;
+	},
+
+	hideOverlays: function() {
+		this.overlaysShowing = false;
+		this.$.top_row.hide();
+		this.$.bottom_row.hide();
+		this.$.readerDogear.hide();
+		this.$.body.overlayStateChange("hidden");
+	},
+
+	setHideOnceOne: function() {
+		this.hideOnce = true;
+	},
+
+	setHideOnceTwo: function() {
+		this.hideOnce = true;
+		this.showOverlays();
+	},
+
+	handleDogear: function() {
+		this.$.body.toggleBookmark();
+	},
+
+	updateBookmarks: function(inSender, hasBookmark) {
+		this.$.readerDogear.toggle(hasBookmark);
+	},
+
+	handleLocationSelected: function(inSender, location) {
+		this.$.body.goToLocation(location);
+	},
+
+	handleTOCSelected: function() {
+		this.$.body.goToTableOfContents();
+	},
+
+	handlePrevLocSelected: function() {
+		this.$.body.historyBack();
+	},
+
+	handleTypeSelection: function(inSender, type) {
+		this.$.body.setFontType(type);
+		this.saveFontSetting("currentFontType", type);
+	},
+
+	handleFontSizeChanged: function(inSender, size) {
+		this.$.body.setFontSize(size);
+		this.saveFontSetting("currentFontSize", size);
+	},
+
+	handleReaderThemeChanged: function(inSender, theme) {
+		this.$.body.setThemeColor(theme);
+		this.saveFontSetting("currentTheme", theme);
+		this.updateThemeClass(theme);
+	},
+
+	updateThemeClass: function(theme) {
+		this.removeClass("white");
+		this.removeClass("sepia");
+		this.removeClass("black");
+
+		var themeClass = "white";
+		if (theme === 1) themeClass = "sepia";
+		else if (theme === 2) themeClass = "black";
+
+		this.addClass(themeClass);
+		this.$.body.changeCSSClassesTo(themeClass);
+	},
+
+	handleBrightnessChanged: function(inSender, brightness) {
+		// Brightness control via webOS display service
+		this.log("Brightness: " + brightness);
+	},
+
+	saveFontSetting: function(key, value) {
+		try {
+			var settings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
+			settings[key] = value;
+			localStorage.setItem("ereader_settings", JSON.stringify(settings));
+		} catch (e) {}
+	},
+
+	saveReadingPosition: function() {
+		if (this.bookData && this.currentLocStart !== undefined) {
+			this.bookData.locationsCompleted = this.currentLocStart;
+			// Save to library
+			try {
+				var libraryJson = localStorage.getItem("ereader_library");
+				var library = libraryJson ? JSON.parse(libraryJson) : [];
+				for (var i = 0; i < library.length; i++) {
+					if (library[i].asin === this.bookData.asin) {
+						library[i].locationsCompleted = this.currentLocStart;
+						library[i].lastAccessed = Date.now();
+						break;
+					}
+				}
+				localStorage.setItem("ereader_library", JSON.stringify(library));
+			} catch (e) {}
+		}
+	},
+
+	handleMouseDown: function(inSender, inEvent) {
+		// Handle touch/click for page turning
+		var x = inEvent.pageX || inEvent.clientX;
+		var width = window.innerWidth;
+
+		if (x < width * 0.25) {
+			// Left quarter - previous page
+			if (!this.overlaysShowing) {
+				this.$.body.previousPage();
+			} else {
+				// Hide overlays first, then user can turn page
+				this.hideOverlays();
+			}
+		} else if (x > width * 0.75) {
+			// Right quarter - next page
+			if (!this.overlaysShowing) {
+				this.$.body.nextPage();
+			} else {
+				// Hide overlays first, then user can turn page
+				this.hideOverlays();
+			}
+		} else {
+			// Center - toggle overlays
+			this.showOverlays();
+		}
+	},
+
+	handleNoteShowingChanged: function(inSender, showing) {
+		// Notes visibility changed
+	},
+
+	handleEndOfBook: function(inSender, firstPage) {
+		// Reached end or beginning of book
+		this.log("End of book, firstPage: " + firstPage);
+	},
+
+	enableHistoryBack: function() {
+		this.$.bottom_row.enableHistoryBack();
+	},
+
+	disableHistoryBack: function() {
+		this.$.bottom_row.disableHistoryBack();
+	},
+
+	setAnimationConfig: function(val) {
+		this.$.body.setAnimationConfig(val);
+	},
+
+	selectInitialFontType: function(fontType) {
+		this.$.body.selectInitialFontType(fontType);
+		this.$.top_row.setFontType(fontType);
+	},
+
+	selectInitialFontSize: function(fontSize) {
+		this.$.body.selectInitialFontSize(fontSize);
+		this.$.top_row.setFontSize(fontSize);
+	},
+
+	selectInitialTheme: function(theme) {
+		this.$.body.selectInitialTheme(theme);
+		this.$.top_row.setTheme(theme);
+		this.updateThemeClass(theme);
+	},
+
+	handleWindowRotated: function() {
+		if (this.pluginReady) {
+			this.$.body.handleWindowRotated();
+		}
+	},
+
+	goToLocation: function(location) {
+		this.$.body.goToLocation(location);
+	},
+
+	goToPosition: function(position) {
+		this.$.body.goToPosition(position);
+	},
+
+	getCurrentPosition: function() {
+		return this.currentLocStart;
+	}
+});

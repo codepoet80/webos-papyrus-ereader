@@ -1,0 +1,122 @@
+.library-navigator {
+	background: #8e8373 url(../../images/nav-bg-colored-texture.png) 0 0 repeat-y;
+	/*
+	border-top-left-radius: 18px;
+	border-bottom-left-radius: 18px;
+	*/
+}
+
+.library-navigator-title {
+	color: #fff;
+	/* text-shadow: rgba(0, 0, 0, 0.3) 0 1px 0; */
+	margin: -11px 0 0 40px;
+}
+
+.library-store-title {
+	color: #bfb8aa;
+}
+
+.sync-text {
+	color: #bfb8aa;
+	margin: 8px 0 0 9px;
+	font-size: 15px;
+}
+
+.sync-indicator-box {
+	padding-left: 15px;
+}
+
+.library-button {
+	background: url(../../images/nav-icon-library.png) left top no-repeat;
+	-webkit-border-image: none;
+	margin: 8px 0px 2px 9px;
+	display: inline-block;
+	min-width: 32px;
+	min-height: 32px;
+}
+
+.enyo-button.add-cat-button {
+	position: absolute;
+	right: 20px;
+	top: 8px;
+	border-width:4px;
+	background:none !important;
+	-webkit-border-image: url(../../images/button.png) 4 !important;
+}
+
+.add-cat-button-icon {
+	position:absolute;
+	left:-4px;
+	top:-2px;
+}
+
+a { text-decoration: none;}
+
+.library-menu .enyo-scroller-scrollee {
+	margin-left: 50px;
+}
+
+.library-menu .enyo-item {
+	color: #e2dac9;
+	font-size: 18px;
+	line-height: 1.5em;
+	padding-left: 0;
+	border: 0 none;
+	background: url(../../images/nav-divider.png) right bottom no-repeat;
+}
+
+.all-books-collection {
+	color: #e2dac9;
+	font-size: 18px;
+	line-height: 1.5em;
+	padding-left: 0;
+	border: 0 none;
+	background: url(../../images/nav-divider.png) right bottom no-repeat;
+	margin: 10px 0 0 50px;
+	padding-bottom: 10px;
+}
+
+.all-books-collection:active {
+	color: #fff;
+}
+
+.library-header {
+	background: url(../../images/nav-divider.png) right bottom no-repeat;
+	padding-bottom:5px;
+}
+
+.enyo-item.disabled {
+	color: #bfb8aa;
+	font-weight: normal;
+}
+
+.library-menu .enyo-item:active {
+	color: #fff;
+}
+
+.categoryitem-input.enyo-input {
+	max-width:260px;
+}
+
+.enyo-item > .categoryitem-input.enyo-input {
+	margin-top: -12px;
+	margin-bottom: -9px;
+}
+
+.collection-menu-header {
+	font-size: 22px;
+	color: #444441;
+	margin: 5px;
+    text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align:center;
+	overflow: hidden;
+}
+
+.collection-menu-popup {
+	border-color: #cecac3 #b8b5ac #62625a #bfbcb3;
+	padding: 5px 10px;
+	font-weight: bold;
+	font-size: 16px;
+	width: 300px;
+}

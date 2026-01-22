@@ -1,0 +1,154 @@
+/* Commonly used styles */
+
+/* EpubRenderer styling */
+.epub-renderer {
+	position: relative;
+	width: 100%;
+	height: 100%;
+	overflow: hidden;
+	-webkit-box-sizing: border-box;
+	box-sizing: border-box;
+}
+
+.epub-page-container {
+	position: absolute;
+	top: 20px;
+	left: 30px;
+	right: 30px;
+	bottom: 20px;
+	overflow: auto;
+	-webkit-overflow-scrolling: touch;
+	line-height: 1.6;
+	text-align: justify;
+	font-size: 18px;
+	font-family: Georgia, serif;
+	-webkit-box-sizing: border-box;
+	box-sizing: border-box;
+}
+
+.epub-offscreen {
+	position: absolute;
+	top: -9999px;
+	left: 0;
+	width: 100%;
+	padding-left: 30px;
+	padding-right: 30px;
+	visibility: hidden;
+	line-height: 1.6;
+	text-align: justify;
+	font-size: 18px;
+	font-family: Georgia, serif;
+	-webkit-box-sizing: border-box;
+	box-sizing: border-box;
+}
+
+hr {
+	border: 0 none;
+	border-top: 1px solid #adad9d;
+	height: 1px;
+	margin-bottom: -1px;
+	padding-bottom: -1px;
+}
+
+.truncate {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.panel-header {
+	font-size: 26px;
+	font-weight: bold;
+	line-height: 2em;
+}
+
+.panel-header .enyo-item {
+	padding-right:10px;
+	max-width:360px;
+	overflow:hidden;
+	text-overflow: ellipsis;
+}
+
+.small-text {
+	color: #62625a;	
+	font-size: 14px;
+	font-weight: bold;
+}
+
+.book-title,
+.book-author,
+.tab-label,
+.tab-label.enyo-radiobutton.enyo-button-depressed, .tab-label.enyo-radiobutton.enyo-button-down,
+.bookinfo-popup,
+.note-textarea {
+	color: #444441;
+	font-size: 16px;
+}
+
+.book-title,
+.bookinfo-popup {
+	font-size: 18px;
+	font-weight: bold;
+}
+
+.button-label {
+	font-size: 15px;
+	font-weight: bold;
+	color: black;
+	min-width: 100px;
+	text-align: center;
+}
+
+.clear-btn {
+	margin-top: 6px;
+}
+
+/* List divider */
+
+.list-view-item {
+	padding: 8px;
+	border-top: 1px solid #e8e6e0;
+	border-bottom: 1px solid #adad9d;
+}
+
+.list-view-item:first-child {
+	border-top: 0 none;
+}
+
+/* search field ui (system FancyInput override) */
+
+.search-field .enyo-inner {
+	width: 247px;
+}
+
+.clear-scrim {
+	opacity: 0;
+}
+
+/* pop baloon & list divider */
+
+.pop-balloon {
+	min-width: 50px;
+	position: absolute;
+	-webkit-box-sizing: border-box;
+	border-width: 9px;
+	padding: 0;
+	-webkit-border-image: url(../../images/popup-balloon-bg-white.png) 9 9 9 9;
+	/* padding: 9px; */
+}
+.pop-balloon .list-view-item {
+	color:#444441;
+	border-width:0 1 1;
+	-webkit-border-image: url(../../images/popup-border.png) 0 0 3 0 stretch stretch;
+}
+.pop-balloon .list-view-item:active {
+	color: #999;
+}
+.pop-balloon .list-view-item.disabled{
+	/*border-bottom: 1px solid #dddbd6;*/
+	font-weight: bold;
+	color: #c8c4bb;
+}
+.pop-balloon .list-view-item:last-child {
+	border-bottom: 0;
+}
