@@ -2,3 +2,5 @@ com.mhwsoft.preader_0.8.21_all/*
 com.palm.app.kindle_0.12.50_all/*
 *.ipk
 ebooks/*
+.DS_Store
+

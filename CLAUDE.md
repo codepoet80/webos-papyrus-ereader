@@ -10,18 +10,216 @@ The goal is to take Kindle's polished frontend and replace its broken proprietar
 
 ---
 
+## Current Status: WORKING MILESTONE ✓
+
+The merged app **com.webos.ereader** is functional:
+- Library grid displays imported books
+- Books can be opened and read
+- Page turns work (tap left/right edges)
+- Themes work (white/sepia/black)
+- Font controls work
+- Reading position is saved
+- Library button returns to grid view
+
+**Known Issues to Address:**
+- Some books have pagination imperfections (content sizing)
+- Location slider doesn't work
+- Some books with large images may have layout issues
+- Highlights/annotations not fully implemented
+
+---
+
 ## Directory Structure
 
 ```
 /Users/jonwise/Projects/webos-ereader/
-├── com.palm.app.kindle_0.12.50_all/
-│   ├── data.tar.gz                          # Must extract first!
-│   └── usr/palm/applications/com.palm.app.kindle/  # After extraction
-├── com.mhwsoft.preader_0.8.21_all/
-│   └── usr/palm/applications/com.mhwsoft.preader/
-├── CLAUDE.md                                # This file
-└── (future: com.webos.ereader/)             # Merged project
+├── com.webos.ereader/                       # ★ MERGED PROJECT (active)
+│   ├── app/                                 # Kindle UI (Enyo components)
+│   │   ├── Main.js                          # Simplified, no Amazon
+│   │   ├── reading/
+│   │   │   ├── body.js                      # Uses EpubRenderer
+│   │   │   └── BookReader.js                # Touch handling fixed
+│   │   └── common/
+│   │       ├── EpubRenderer.js              # ★ KRF replacement
+│   │       └── MojoCompat.js                # Mojo compatibility layer
+│   ├── src/                                 # Preader engine (ported)
+│   │   ├── pdb/EpubReader.js
+│   │   ├── display/PageFitter.js            # Modified for Enyo
+│   │   ├── display/HTMLBook.js
+│   │   └── ...
+│   └── books/                               # Test ePubs
+├── com.palm.app.kindle_0.12.50_all/         # Original Kindle (reference)
+├── com.mhwsoft.preader_0.8.21_all/          # Original Preader (reference)
+└── CLAUDE.md                                # This file
 ```
+
+---
+
+## Quick Start Commands
+
+```bash
+# Build and deploy
+cd /Users/jonwise/Projects/webos-ereader
+palm-package com.webos.ereader && palm-install com.webos.ereader_*.ipk
+
+# Launch app
+palm-launch com.webos.ereader
+
+# View device logs (for debugging)
+palm-log -f com.webos.ereader
+```
+
+---
+
+## Key Learnings & Fixes Applied
+
+### 1. Enyo VFlexBox + CSS Positioning
+
+**Problem:** Absolutely positioned children don't participate in flex layout.
+
+**Solution:** Use `position: relative` with `flex: 1` for the EpubRenderer so it fills the VFlexBox, then absolutely position children inside it.
+
+```css
+/* CORRECT - participates in flex layout */
+.epub-renderer {
+    position: relative;  /* NOT absolute */
+    width: 100%;
+    height: 100%;
+}
+
+.epub-page-container {
+    position: absolute;  /* OK - parent is positioned */
+    top: 20px; left: 30px; right: 30px; bottom: 20px;
+}
+```
+
+```javascript
+// In body.js - must have flex: 1
+{kind: "EpubRenderer", name: "epubRenderer", flex: 1, className: "epub-renderer", ...}
+```
+
+### 2. Mojo to Enyo Compatibility
+
+Preader uses Mojo's `Element.prototype.update()`. Created `MojoCompat.js` polyfill, but ultimately modified PageFitter to use `.innerHTML` directly:
+
+```javascript
+// PageFitter.js - changed from:
+this.offscreen.update(text);
+// To:
+this.offscreen.innerHTML = text || "";
+```
+
+### 3. Book Loading from Database
+
+Books are pre-imported into WebSQL databases. EpubRenderer loads via `bookDbName` rather than re-parsing ePub files:
+
+```javascript
+// body.js passes bookDbName
+this.$.epubRenderer.initializeBook(
+    book.bookFilePath,
+    book.locationsCompleted || 0,
+    highlightsJSON,
+    this.animationState,
+    fontSize, fontType, theme,
+    book.bookDbName  // ★ Load from existing HTMLBook database
+);
+```
+
+### 4. Screen Height Calculation
+
+PageFitter needs consistent height for pagination. Use actual container height:
+
+```javascript
+getScreenHeight: function() {
+    var container = this.$.pageContainer.hasNode();
+    if (container && container.offsetHeight > 0) {
+        return container.offsetHeight;
+    }
+    return window.innerHeight - 160;  // Fallback
+}
+```
+
+### 5. Touch Event Handling
+
+Touch handling was interfering with overlays. Fixed in BookReader.js:
+
+```javascript
+handleMouseDown: function(inSender, inEvent) {
+    var x = inEvent.pageX || inEvent.clientX;
+    var width = window.innerWidth;
+
+    if (x < width * 0.25) {
+        if (!this.overlaysShowing) {
+            this.$.body.previousPage();
+        } else {
+            this.hideOverlays();
+        }
+    } else if (x > width * 0.75) {
+        if (!this.overlaysShowing) {
+            this.$.body.nextPage();
+        } else {
+            this.hideOverlays();
+        }
+    } else {
+        this.showOverlays();
+    }
+}
+```
+
+### 6. Large Image Handling
+
+Large images caused PageFitter to get stuck. Fixed by limiting image height:
+
+```javascript
+// PageFitter.js handleImage()
+var maxImageHeight = Math.floor(size * 0.6);  // 60% of screen
+```
+
+### 7. Library Persistence
+
+Reading positions saved to localStorage (simplified from MojoDB):
+
+```javascript
+// Main.js
+updateBookInLibrary: function(book) {
+    var library = JSON.parse(localStorage.getItem("ereader_library") || "[]");
+    for (var i = 0; i < library.length; i++) {
+        if (library[i].asin === book.asin) {
+            library[i].locationsCompleted = book.locationsCompleted;
+            library[i].lastAccessed = book.lastAccessed;
+            break;
+        }
+    }
+    localStorage.setItem("ereader_library", JSON.stringify(library));
+}
+```
+
+---
+
+## Architecture: Key Modified Files
+
+| File | Changes Made |
+|------|--------------|
+| `app/common/EpubRenderer.js` | Created - wraps Preader's PageFitter/HTMLBook with KRF-compatible API |
+| `app/common/MojoCompat.js` | Created - Mojo polyfills for Preader code |
+| `app/reading/body.js` | Replaced KRF Hybrid with EpubRenderer component |
+| `app/reading/BookReader.js` | Fixed touch handling for page turns |
+| `app/Main.js` | Removed Amazon code, added localStorage library, updateBookInLibrary() |
+| `app/common/common.css` | Added epub-renderer, epub-page-container styles |
+| `src/display/PageFitter.js` | Changed .update() to .innerHTML, added image sizing |
+| `src/display/HTMLBook.js` | Debug logging (can be removed) |
+
+---
+
+## Test Books
+
+Located in `com.webos.ereader/books/`:
+- Anne Frank's Diary - has large images, tests image handling
+- Accelerando - longer book, tests pagination
+- Catcher in the Rye - standard formatting
+- (others)
+
+Books must be imported first - the app doesn't have a file picker yet. Import via Preader or manual database entry.
 
 **Important:** The Kindle app is packaged. Run this to extract:
 ```bash
@@ -528,38 +726,88 @@ com.mhwsoft.preader_0.8.21_all/usr/palm/applications/com.mhwsoft.preader/
 
 ---
 
-## Notes for Future Implementation
+## Implementation Status
 
-1. **Image handling:** Preader stores images as base64 in the database with labels. The EpubRenderer needs to intercept `<img label="...">` tags and fetch the actual data.
+### ✅ Completed
 
-2. **TOC extraction:** ePub TOC is in `toc.ncx` file or can be inferred from spine. EpubReader already extracts this - need to expose it.
+1. **Image handling:** Images stored as base64 with labels. HTMLBook.getImage() retrieves them. PageFitter.handleImage() scales large images to 60% of screen height.
 
-3. **Bookmarks:** Preader uses byte positions. Need to convert between Kindle's "locations" concept and bytes. Using percentage (0-100) as the common unit is simplest.
+2. **Font rendering:** Working - setFontSize() and setTypeFace() update CSS and trigger page reflow via refreshPage().
 
-4. **Font rendering:** Preader applies fonts via CSS. The PageFitter measures with the offscreen element, so changing fonts requires re-measuring all pages.
+3. **Theme colors:** Working - setNightModeColor() applies white/sepia/black themes via applyTheme().
 
-5. **Theme colors:** Preader's `globalOptions.getTextStyling()` and `getBackgroundStyling()` handle this. Need to wire to Kindle's theme switcher.
+4. **Memory management:** HTMLBook's chunked 4KB buffer system preserved from Preader.
 
-6. **Memory management:** Preader uses a 2-buffer cache in HTMLBook. This is important on the memory-constrained TouchPad. Don't load entire book into memory.
+5. **Basic reading:** Page turns, position tracking, library navigation all functional.
 
-7. **Smooth scrolling:** Preader has a smooth scroll mode that loads 3 pages. The basic implementation can skip this initially.
+### 🔧 Needs Work
+
+1. **Location slider:** The progress slider in bottom_row doesn't work. Need to wire its events to EpubRenderer.gotoLocation().
+
+2. **TOC panel:** SlideoutPanel for table of contents needs to fetch TOC from EpubReader and navigate on selection.
+
+3. **File import:** No file picker yet. Books must be pre-imported. Need to add "Import ePub" button that uses webOS file picker.
+
+4. **Search:** SearchView panel needs implementation - use HTMLBook.read() to search content.
+
+5. **Highlights/annotations:** Stub methods exist but selection and persistence not implemented.
+
+6. **Smooth scrolling:** Optional - Preader's getTriplePage() for smooth scroll not implemented.
+
+### 🐛 Known Bugs
+
+1. Some books have inconsistent page sizing - may need PageFitter tuning
+2. Very large images can still cause layout issues
+3. Some ePubs with unusual structure may not parse correctly
 
 ---
 
-## Quick Start Commands
+## TODO List
+
+### High Priority
+- [ ] Fix character/encoding problems
+- [ ] Work on page-turning consistency
+- [ ] Fix location slider in bottom_row.js - wire drag events to EpubRenderer.gotoLocation()
+- [ ] Wire TOC panel (SlideoutPanelViews/TocView.js) to fetch TOC from EpubReader and navigate
+- [ ] Add "Import ePub" button to library - use webOS file picker service
+- [ ] Test and fix pagination issues with remaining test books
+
+### Medium Priority
+- [ ] Implement search (SlideoutPanelViews/SearchView.js) - search HTMLBook content
+- [ ] Add cover image extraction from ePub metadata for library grid
+- [ ] Implement text selection for highlights
+- [ ] Persist annotations to localStorage or WebSQL
+
+### Low Priority / Nice to Have
+- [ ] Smooth page transitions (CSS animations)
+- [ ] Implement getTriplePage() for smooth scrolling mode
+- [ ] Add reading statistics (time spent, pages read)
+- [ ] Support more ePub edge cases (encrypted fonts, external resources)
+
+### Cleanup
+- [ ] Remove debug console.log statements from PageFitter, HTMLBook, HTMLParser
+- [ ] Remove unused Kindle/Amazon code remnants from Main.js
+- [ ] Clean up commented-out code in body.js
+
+---
+
+## Reference Commands
 
 ```bash
-# Extract Kindle app
-cd /Users/jonwise/Projects/webos-ereader/com.palm.app.kindle_0.12.50_all
-tar -xzf data.tar.gz
+# Build and deploy (primary workflow)
+cd /Users/jonwise/Projects/webos-ereader
+palm-package com.webos.ereader && palm-install com.webos.ereader_*.ipk && palm-launch com.webos.ereader
 
-# View key Kindle files
-cat usr/palm/applications/com.palm.app.kindle/app/reading/body.js
-cat usr/palm/applications/com.palm.app.kindle/app/Main.js
+# View device logs
+palm-log -f com.webos.ereader
 
-# View key Preader files
-cat /Users/jonwise/Projects/webos-ereader/com.mhwsoft.preader_0.8.21_all/usr/palm/applications/com.mhwsoft.preader/src/pdb/EpubReader.js
-cat /Users/jonwise/Projects/webos-ereader/com.mhwsoft.preader_0.8.21_all/usr/palm/applications/com.mhwsoft.preader/src/display/PageFitter.js
+# Extract original Kindle app (if needed)
+cd com.palm.app.kindle_0.12.50_all && tar -xzf data.tar.gz
+
+# View key source files
+cat com.webos.ereader/app/common/EpubRenderer.js
+cat com.webos.ereader/app/reading/body.js
+cat com.webos.ereader/src/display/PageFitter.js
 
 # Detailed plan file
 cat /Users/jonwise/.claude/plans/encapsulated-mixing-dongarra.md
