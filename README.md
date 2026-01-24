@@ -84,7 +84,6 @@ pReader's open-source engine made it possible to replace the Kindle app's propri
 
 - DRM-protected ePubs are not supported
 - Some complex ePub layouts may not render perfectly
-- The location slider is not yet functional
 
 ## License
 
