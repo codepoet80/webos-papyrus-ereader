@@ -20,6 +20,7 @@ The app is fully functional and ready for community testing.
 - Import progress indicator ("Importing 1 of 5...")
 - Loading spinner when opening books
 - Page turns (tap left/right edges of screen)
+- Optional volume button page turning (Settings > Volume buttons turn pages)
 - Themes (white/sepia/black)
 - Font controls (size and typeface)
 - Reading position saved and restored
@@ -30,6 +31,7 @@ The app is fully functional and ready for community testing.
 - Optional page turn animation (fade effect)
 - Auto-skip blank pages
 - About dialog with app info
+- WOSA Updater integration for update notifications
 
 ### Known Limitations
 - Highlights/annotations UI not fully implemented
@@ -48,7 +50,7 @@ The app is fully functional and ready for community testing.
 │   │   ├── Main.js                          # App controller
 │   │   ├── reading/
 │   │   │   ├── body.js                      # Uses EpubRenderer
-│   │   │   └── BookReader.js                # Touch handling, loading spinner
+│   │   │   └── BookReader.js                # Touch handling, volume keys, loading spinner
 │   │   ├── common/
 │   │   │   ├── EpubRenderer.js              # ★ Core rendering engine
 │   │   │   └── FileImporter.js              # ePub import handling
@@ -98,6 +100,23 @@ Page turns use a subtle fade animation (80ms) that can be disabled:
 - **Settings > Basic reading mode = OFF**: Fade animation enabled
 
 The animation respects the setting in real-time (no restart needed).
+
+### Volume Button Page Turning
+
+Hardware volume buttons can optionally be used to turn pages while reading:
+- **Volume Up**: Next page
+- **Volume Down**: Previous page
+
+**To enable**: Settings > Volume buttons turn pages = ON
+
+**Note**: This feature works best when the device audio is muted, otherwise volume change sounds will play.
+
+This is implemented via the `palm://com.palm.keys/audio` service subscription in `BookReader.js`:
+- Feature is disabled by default (controlled by `volumeKeyPageTurn` setting)
+- Subscription starts when book is ready (`handlePluginReady`) if enabled
+- Subscription stops when returning to library (`handleLibrarySelected`)
+- Only responds to "down" events (ignores "up" events)
+- Automatically hides overlays before turning page
 
 ### Blank Page Skipping
 

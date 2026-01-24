@@ -15,6 +15,11 @@ enyo.kind({
 	},
 	className: "book-reader-main white",
 	components: [
+		// Volume keys service for page turning with hardware buttons (optional feature)
+		{name: "volumeKeysService", kind: "PalmService",
+		 service: "palm://com.palm.keys/audio/", method: "status",
+		 subscribe: true, onSuccess: "handleVolumeKey", onFailure: "handleVolumeKeyError"},
+
 		{name: "top_row", kind: "ereader.top_row", className: "top-row-controls", onPageManipulation: "doPageManipulation", onLibrarySelected: "handleLibrarySelected", onSearchQueried: "handleSearchQueried", onBrightnessChanged: "handleBrightnessChanged", showing: false, onTypeSelection: "handleTypeSelection", onFontSizeChanged: "handleFontSizeChanged", onReaderThemeChanged: "handleReaderThemeChanged", onclick: "setHideOnceOne", onSearchBoxCollapsed: "setHideOnceTwo"},
 		{kind: "ereader.reading.DogEarButton", name: "readerDogear", onclick: "handleDogear", className: "reader-dogear", showing: false},
 		{name: "body", kind: "ereader.body", onmousedown: "handleMouseDown", style: "position: absolute; top: 0px; left: 0px; z-index: 50; width: 100%; height: 100%;", onTocAvailableChanged: "handleTocAvailableChanged", onPluginReady: "handlePluginReady", onBookmarkUpdated: "updateBookmarks", onLocationChanged: "handleLocationChanged", onShowOverlays: "showOverlays", onPluginStarted: "handlePluginStarted", onNotesShowingChanged: "handleNoteShowingChanged", onEndOfBook: "handleEndOfBook"},
@@ -31,9 +36,124 @@ enyo.kind({
 	pluginReady: false,
 	pluginStarted: false,
 	bookData: null,
+	volumeKeysActive: false,
 
 	create: function() {
 		this.inherited(arguments);
+		console.log("BookReader: create() - Volume key page turning available (check settings to enable)");
+	},
+
+	// ========================================
+	// VOLUME KEY HANDLING FOR PAGE TURNING
+	// ========================================
+
+	/**
+	 * Check if volume key page turning is enabled in settings.
+	 */
+	isVolumeKeyPageTurnEnabled: function() {
+		try {
+			var settings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
+			return settings.volumeKeyPageTurn === true;
+		} catch (e) {
+			return false;
+		}
+	},
+
+	/**
+	 * Start listening for volume key events.
+	 * Called when book is ready for reading, only if feature is enabled.
+	 */
+	startVolumeKeyListener: function() {
+		// Check if feature is enabled in settings
+		if (!this.isVolumeKeyPageTurnEnabled()) {
+			console.log("BookReader: Volume key page turning is disabled in settings");
+			return;
+		}
+
+		console.log("BookReader: startVolumeKeyListener() called");
+		if (this.volumeKeysActive) {
+			console.log("BookReader: Volume keys already active, skipping");
+			return;
+		}
+
+		try {
+			console.log("BookReader: Calling volumeKeysService.call()");
+			this.$.volumeKeysService.call({subscribe: true});
+			this.volumeKeysActive = true;
+			console.log("BookReader: Volume key subscription started successfully");
+		} catch (e) {
+			console.error("BookReader: Failed to start volume key listener: " + e);
+		}
+	},
+
+	/**
+	 * Stop listening for volume key events.
+	 * Called when leaving reader view.
+	 */
+	stopVolumeKeyListener: function() {
+		console.log("BookReader: stopVolumeKeyListener() called");
+		if (!this.volumeKeysActive) {
+			console.log("BookReader: Volume keys not active, skipping");
+			return;
+		}
+
+		try {
+			console.log("BookReader: Cancelling volumeKeysService subscription");
+			this.$.volumeKeysService.cancel();
+			this.volumeKeysActive = false;
+			console.log("BookReader: Volume key subscription stopped successfully");
+		} catch (e) {
+			console.error("BookReader: Failed to stop volume key listener: " + e);
+		}
+	},
+
+	/**
+	 * Handle errors from volume key service.
+	 */
+	handleVolumeKeyError: function(inSender, inError) {
+		console.error("BookReader: Volume key service error: " + JSON.stringify(inError));
+		this.volumeKeysActive = false;
+	},
+
+	/**
+	 * Handle volume key events from palm://com.palm.keys/audio service.
+	 * Volume Up = Next Page, Volume Down = Previous Page
+	 */
+	handleVolumeKey: function(inSender, inResponse) {
+		console.log("BookReader: handleVolumeKey() - Raw response: " + JSON.stringify(inResponse));
+
+		if (!this.pluginReady) {
+			console.log("BookReader: Plugin not ready, ignoring volume key");
+			return;
+		}
+
+		// The service returns: {key: "volume_up"|"volume_down", state: "down"|"up"}
+		var key = inResponse.key;
+		var state = inResponse.state;
+
+		console.log("BookReader: Volume key event - key: " + key + ", state: " + state);
+
+		// Only respond to key down events (not key up)
+		if (state !== "down") {
+			console.log("BookReader: Ignoring key up event");
+			return;
+		}
+
+		// Hide overlays if showing before turning page
+		if (this.overlaysShowing) {
+			console.log("BookReader: Hiding overlays before page turn");
+			this.hideOverlays();
+		}
+
+		if (key === "volume_up") {
+			console.log("BookReader: Volume UP pressed - turning to NEXT page");
+			this.$.body.nextPage();
+		} else if (key === "volume_down") {
+			console.log("BookReader: Volume DOWN pressed - turning to PREVIOUS page");
+			this.$.body.previousPage();
+		} else {
+			console.log("BookReader: Unknown volume key: " + key);
+		}
 	},
 
 	doPageManipulation: function(inSender, action) {
@@ -54,6 +174,11 @@ enyo.kind({
 
 	handleLibrarySelected: function() {
 		this.log("BookReader: handleLibrarySelected called");
+
+		// Stop listening for volume key events
+		console.log("BookReader: handleLibrarySelected - Stopping volume key listener");
+		this.stopVolumeKeyListener();
+
 		if (this.pluginReady) {
 			this.saveReadingPosition();
 		}
@@ -95,6 +220,10 @@ enyo.kind({
 		this.overlaysShowing = false;
 		this.showOverlays();
 		this.doReaderReady();
+
+		// Start listening for volume key events for page turning
+		console.log("BookReader: handlePluginReady - Starting volume key listener");
+		this.startVolumeKeyListener();
 	},
 
 	handlePluginStarted: function() {

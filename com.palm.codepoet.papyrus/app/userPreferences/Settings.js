@@ -53,6 +53,13 @@ enyo.kind({
 							]}
 						]},
 					]},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{content: $L("Volume buttons turn pages"), flex: 1},
+							{kind: "ToggleButton", name: "volumeKeysBtn", state: false, onChange: "saveVolumeKeysChange"},
+						]},
+						{content: $L("This feature works best when audio is muted."), className: "loginFormDescription"},
+					]},
 					{kind: "RowGroup", style: "margin-top: 20px;", components: [
 						{kind: "Button", content: $L("Clear Library"), className: "enyo-button-negative", onclick: "confirmClearLibrary"},
 					]},
@@ -88,6 +95,7 @@ enyo.kind({
 			this.$.themeSelector.setValue(settings.currentTheme || 0);
 			this.$.fontSelector.setValue(settings.currentFontType || 0);
 			this.$.fontSizeSelector.setValue(settings.currentFontSize || 18);
+			this.$.volumeKeysBtn.setState(settings.volumeKeyPageTurn || false);
 		} catch (e) {
 			this.log("Error loading settings: " + e);
 		}
@@ -117,6 +125,10 @@ enyo.kind({
 
 	saveFontSizeChange: function(inSender) {
 		this.saveSettings("currentFontSize", inSender.getValue());
+	},
+
+	saveVolumeKeysChange: function() {
+		this.saveSettings("volumeKeyPageTurn", this.$.volumeKeysBtn.getState());
 	},
 
 	confirmClearLibrary: function() {

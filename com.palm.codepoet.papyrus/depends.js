@@ -91,5 +91,8 @@ enyo.depends(
 
 	// Application - Main (load last)
 	"app/Main.js",
-	"app/Main.css"
+	"app/Main.css",
+
+	// WOSA Updaters
+	"src/Updater-Helper.js"
 );

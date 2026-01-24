@@ -14,6 +14,7 @@ enyo.kind({
 	},
 	components: [
 		{kind: "ApplicationEvents", onWindowActivated: "windowActivatedHandler", onWindowDeactivated: "windowDeactivatedHandler", onWindowRotated: "handleWindowRotated"},
+		{kind: "Helpers.Updater", name: "myUpdater"},
 
 		// Toaster for slideout panels (TOC, search, markups)
 		{kind: "Toaster", name: "toaster", scrim: true, flyInFrom: "right", style: "top:0px; bottom:0px; z-index:500;", lazy: false, onClose: "closeToaster", components: [
@@ -156,7 +157,7 @@ enyo.kind({
 		if (this.$.navigator) {
 			this.$.navigator.rebuildView();
 		}
-		// No auto-import - user must use "Import ePub" button
+		this.$.myUpdater.CheckForUpdate("Papyrus eReader");
 	},
 
 	scanForNewBooks: function() {
