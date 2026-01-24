@@ -529,30 +529,47 @@ enyo.kind({
 		this.log("FilePicker response: " + JSON.stringify(inResponse));
 
 		// Collect all file paths from the response
-		var filePaths = [];
+		var allPaths = [];
 		if (inResponse) {
 			// FilePicker returns an array of selected files
 			if (Array.isArray(inResponse) && inResponse.length > 0) {
 				for (var i = 0; i < inResponse.length; i++) {
 					var path = inResponse[i].fullPath || inResponse[i].path;
 					if (path) {
-						filePaths.push(path);
+						allPaths.push(path);
 					}
 				}
 			} else if (inResponse.fullPath) {
-				filePaths.push(inResponse.fullPath);
+				allPaths.push(inResponse.fullPath);
 			} else if (inResponse.path) {
-				filePaths.push(inResponse.path);
+				allPaths.push(inResponse.path);
 			} else if (typeof inResponse === "string") {
-				filePaths.push(inResponse);
+				allPaths.push(inResponse);
 			} else if (inResponse.result && inResponse.result.fullPath) {
-				filePaths.push(inResponse.result.fullPath);
+				allPaths.push(inResponse.result.fullPath);
+			}
+		}
+
+		// Filter to only .epub files
+		var filePaths = [];
+		var skippedCount = 0;
+		for (var i = 0; i < allPaths.length; i++) {
+			if (allPaths[i].toLowerCase().indexOf(".epub") !== -1) {
+				filePaths.push(allPaths[i]);
+			} else {
+				skippedCount++;
 			}
 		}
 
 		if (filePaths.length > 0) {
-			this.log("Importing " + filePaths.length + " file(s)");
+			this.log("Importing " + filePaths.length + " ePub file(s)");
+			if (skippedCount > 0) {
+				this.log("Skipped " + skippedCount + " non-ePub file(s)");
+			}
 			this.importMultipleEpubs(filePaths);
+		} else if (skippedCount > 0) {
+			// User selected files but none were epubs
+			this.showError("Import Error", "Please select ePub files only (.epub)");
 		} else {
 			this.log("No file paths in response");
 		}

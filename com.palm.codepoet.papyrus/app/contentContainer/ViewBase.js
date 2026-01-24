@@ -29,7 +29,7 @@ enyo.kind({
 				]},
 				{name: "noBooksMessageTxt", className: "empty-library-text", content: $L("No books in your library")},
 				{className: "empty-library-subtext", content: $L("Press the button to 'Import ePub' files")},
-				{className: "empty-library-subtext", style: "margin-top: 10px;", content: $L("Place ePub files in /media/internal/ebooks/")},
+				{className: "empty-library-subtext", style: "margin-top: 10px;", content: $L("Place ePub files in /media/internal")},
 				{kind: "Spacer", flex: 1},
 			]},
 			{kind: "Spacer", flex: 1},
