@@ -54,7 +54,7 @@
 .reader-dogear {
 	position: absolute;
 	right: 1px;
-	z-index: 104;
+	z-index: 110;
 	top: -1px;
 	width: 55px;
 	overflow: hidden;
@@ -96,7 +96,8 @@
 	-webkit-box-pack: end !important; /* horizontal */
 	z-index: 2;
 	position: relative;
-	right:0px;
+	right: 0px;
+	margin-right: 55px;
 }
 
 .book-reader-top-right .search-field .enyo-button-icon {

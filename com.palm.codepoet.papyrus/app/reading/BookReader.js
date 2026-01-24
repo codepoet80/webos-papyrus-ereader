@@ -19,7 +19,13 @@ enyo.kind({
 		{kind: "ereader.reading.DogEarButton", name: "readerDogear", onclick: "handleDogear", className: "reader-dogear", showing: false},
 		{name: "body", kind: "ereader.body", onmousedown: "handleMouseDown", style: "position: absolute; top: 0px; left: 0px; z-index: 50; width: 100%; height: 100%;", onTocAvailableChanged: "handleTocAvailableChanged", onPluginReady: "handlePluginReady", onBookmarkUpdated: "updateBookmarks", onLocationChanged: "handleLocationChanged", onShowOverlays: "showOverlays", onPluginStarted: "handlePluginStarted", onNotesShowingChanged: "handleNoteShowingChanged", onEndOfBook: "handleEndOfBook"},
 		{name: "bottom_row", kind: "ereader.bottom_row", className: "bottom-row-controls", onSlideOutSelected: "handleSlideOutSelected", onclick: "setHideOnceOne", showing: false, onLocationSelected: "handleLocationSelected", onTOCSelected: "handleTOCSelected", onPreviousLocationSelected: "handlePrevLocSelected"},
-		{name: "dimCover", className: "dimCover", onclick: "handleDismissSlideout", showing: false}
+		{name: "dimCover", className: "dimCover", onclick: "handleDismissSlideout", showing: false},
+		{name: "loadingPopup", kind: "Popup", className: "spinner-popup", lazy: false, scrim: true, modal: true, components: [
+			{kind: "VFlexBox", align: "center", components: [
+				{kind: "SpinnerLarge"},
+				{content: "Loading book...", style: "color: white; margin-top: 10px;"}
+			]}
+		]}
 	],
 
 	pluginReady: false,
@@ -65,6 +71,9 @@ enyo.kind({
 		this.log(JSON.stringify(bookData));
 		this.bookData = bookData;
 
+		// Show loading spinner
+		this.$.loadingPopup.openAtCenter();
+
 		this.$.top_row.$.bookTitle.setContent(bookData.title);
 		this.$.bottom_row.setTotalLocations(bookData.locationsTotal || 10000);
 		this.$.bottom_row.setLocationInfo(bookData.locationsCompleted || 0);
@@ -79,6 +88,9 @@ enyo.kind({
 
 	handlePluginReady: function() {
 		this.log();
+		// Hide loading spinner
+		this.$.loadingPopup.close();
+
 		this.pluginReady = true;
 		this.overlaysShowing = false;
 		this.showOverlays();
