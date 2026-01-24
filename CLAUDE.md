@@ -844,17 +844,17 @@ com.mhwsoft.preader_0.8.21_all/usr/palm/applications/com.mhwsoft.preader/
 
 ### High Priority
 - [x] Fix character/encoding problems - **DONE** (UTF-8 encoding=2 in PageFitter)
-- [ ] Work on page-turning consistency
-- [x] Fix location slider in bottom_row.js - **DONE** (fixed scale to 10000 in FileImporter)
+- [x] Work on page-turning consistency - **DONE** (fixed overlay bug, widened tap zones, fixed async callbacks)
+- [x] Fix location slider in bottom_row.js - **DONE** (fixed scale to 10000, added migration for old books)
 - [x] Wire TOC panel (SlideoutPanelViews/TocView.js) - **DONE** (gets bookmarks from EpubRenderer)
-- [ ] Add "Import ePub" button to library - use webOS file picker service (already exists in AppMenu)
+- [x] Add "Import ePub" button to library - **EXISTS** (in AppMenu, uses webOS FilePicker)
 - [ ] Test and fix pagination issues with remaining test books
 
 ### Medium Priority
 - [x] Implement search (SlideoutPanelViews/SearchView.js) - **DONE** (EpubRenderer.searchBook())
 - [x] Add cover image extraction from ePub metadata - **DONE** (EpubReader.getCoverImage())
 - [ ] Implement text selection for highlights
-- [ ] Persist annotations to localStorage or WebSQL
+- [x] Persist annotations to localStorage - **DONE** (body.js saves/loads from ereader_annotations)
 
 ### Low Priority / Nice to Have
 - [ ] Smooth page transitions (CSS animations)
@@ -863,7 +863,7 @@ com.mhwsoft.preader_0.8.21_all/usr/palm/applications/com.mhwsoft.preader/
 - [ ] Support more ePub edge cases (encrypted fonts, external resources)
 
 ### Cleanup
-- [ ] Remove debug console.log statements from PageFitter, HTMLBook, HTMLParser
+- [ ] Remove excessive debug console.log statements (keep key diagnostic ones)
 - [ ] Remove unused Kindle/Amazon code remnants from Main.js
 - [ ] Clean up commented-out code in body.js
 

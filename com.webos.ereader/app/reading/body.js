@@ -98,13 +98,40 @@ enyo.kind({
 	initialFontSize: 20,
 	initialTheme: 0,
 
-	// Annotation storage (in-memory for now, can be persisted to WebSQL)
+	// Annotation storage (persisted to localStorage)
 	annotations: [],
 	bookmark: null,
 
 	create: function() {
 		this.inherited(arguments);
 		this.annotations = [];
+		this.loadAnnotationsFromStorage();
+	},
+
+	/**
+	 * Load all annotations from localStorage
+	 */
+	loadAnnotationsFromStorage: function() {
+		try {
+			var stored = localStorage.getItem("ereader_annotations");
+			this.annotations = stored ? JSON.parse(stored) : [];
+			console.log("body: Loaded " + this.annotations.length + " annotations from storage");
+		} catch (e) {
+			console.log("body: Error loading annotations: " + e);
+			this.annotations = [];
+		}
+	},
+
+	/**
+	 * Save all annotations to localStorage
+	 */
+	saveAnnotationsToStorage: function() {
+		try {
+			localStorage.setItem("ereader_annotations", JSON.stringify(this.annotations));
+			console.log("body: Saved " + this.annotations.length + " annotations to storage");
+		} catch (e) {
+			console.log("body: Error saving annotations: " + e);
+		}
 	},
 
 	rendered: function() {
@@ -360,11 +387,13 @@ enyo.kind({
 				break;
 			}
 		}
+		this.saveAnnotationsToStorage();
 		this.findPageAnnotations();
 	},
 
 	addAnnotationToDB: function(annotationEntry) {
 		this.annotations.push(annotationEntry);
+		this.saveAnnotationsToStorage();
 		this.findPageAnnotations();
 	},
 
