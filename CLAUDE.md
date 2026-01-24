@@ -3,35 +3,37 @@
 ## Project Overview
 
 **Papyrus** (`com.palm.codepoet.papyrus`) is an open-source ePub reader for webOS, created by merging:
-1. **Kindle app** (`com.palm.app.kindle`) - Beautiful Enyo-based UI
-2. **Preader app** (`com.mhwsoft.preader`) - Working pure-JavaScript ePub engine
+1. **Kindle Beta app** (`com.palm.app.kindle`) - Beautiful Enyo-based UI
+2. **pReader app** (`com.mhwsoft.preader`) - Working pure-JavaScript ePub engine
 
-The result is a fully functional e-reader for the HP TouchPad and other webOS devices - a new app in 2026 for a platform declared dead in 2011!
+The result is a fully functional e-reader for the HP TouchPad and other webOS devices.
 
 ---
 
 ## Current Status: COMMUNITY BETA
 
-The app is fully functional and ready for community testing:
+The app is fully functional and ready for community testing.
 
 ### Working Features
 - Library grid/list view with book covers
 - Multi-select file picker for batch ePub imports
 - Import progress indicator ("Importing 1 of 5...")
+- Loading spinner when opening books
 - Page turns (tap left/right edges of screen)
 - Themes (white/sepia/black)
 - Font controls (size and typeface)
 - Reading position saved and restored
-- Location slider navigation
+- Bookmarks via dog-ear button
 - Table of Contents panel
 - Search within book
-- Collections/categories for organizing books
 - Settings persistence
 - Optional page turn animation (fade effect)
 - Auto-skip blank pages
+- About dialog with app info
 
 ### Known Limitations
 - Highlights/annotations UI not fully implemented
+- Location slider not yet functional
 - Some ePubs with unusual structure may not parse correctly
 - Very large images may cause layout issues in some books
 
@@ -46,10 +48,10 @@ The app is fully functional and ready for community testing:
 │   │   ├── Main.js                          # App controller
 │   │   ├── reading/
 │   │   │   ├── body.js                      # Uses EpubRenderer
-│   │   │   └── BookReader.js                # Touch handling
+│   │   │   └── BookReader.js                # Touch handling, loading spinner
 │   │   ├── common/
 │   │   │   ├── EpubRenderer.js              # ★ Core rendering engine
-│   │   │   └── MojoCompat.js                # Mojo compatibility layer
+│   │   │   └── FileImporter.js              # ePub import handling
 │   │   ├── contentContainer/                # Library views
 │   │   ├── libraryNavigator/                # Sidebar navigation
 │   │   └── panels/                          # Slideout panels (TOC, search)
@@ -57,11 +59,13 @@ The app is fully functional and ready for community testing:
 │   │   ├── pdb/EpubReader.js                # ePub parser
 │   │   ├── display/PageFitter.js            # Pagination engine
 │   │   ├── display/HTMLBook.js              # Book content storage
+│   │   ├── MojoCompat.js                    # Mojo API compatibility shim
 │   │   └── ...
 │   └── appinfo.json
 ├── com.palm.app.kindle_0.12.50_all/         # Original Kindle (reference)
 ├── com.mhwsoft.preader_0.8.21_all/          # Original Preader (reference)
-└── CLAUDE.md                                # This file
+├── README.md                                # Public documentation
+└── CLAUDE.md                                # This file (dev notes)
 ```
 
 ---
@@ -78,6 +82,9 @@ palm-launch com.palm.codepoet.papyrus
 
 # View device logs (for debugging)
 palm-log -f com.palm.codepoet.papyrus
+
+# Full build-install-launch cycle
+palm-package com.palm.codepoet.papyrus && palm-install com.palm.codepoet.papyrus_*.ipk && palm-launch com.palm.codepoet.papyrus
 ```
 
 ---
@@ -98,6 +105,13 @@ The renderer automatically skips blank pages when navigating forward:
 - Maximum 5 consecutive blank pages skipped
 - Only skips forward (backward navigation shows all pages)
 - Blank = page with no visible text content after stripping HTML tags
+
+### Loading Spinner
+
+When opening a book, a loading spinner displays while:
+- HTMLBook database is loaded
+- PageFitter prepares the first page
+- Spinner closes when `handlePluginReady()` fires
 
 ### Settings Storage
 
@@ -121,11 +135,17 @@ Settings are stored in `localStorage` under key `ereader_settings`:
 
 Books are stored in `localStorage` under key `ereader_library` as a JSON array of BookData objects. Book content is stored in WebSQL databases (one per book).
 
-### File Import
+### File Import / FilePicker
 
-The FilePicker returns an array of selected files:
+The webOS FilePicker is a system component that shows all indexed documents - it does not support folder or extension filtering.
+
+Our workaround:
+- FilePicker shows all documents (`fileType: ["document"]`)
+- After selection, `handleFilePicked()` filters to only accept `.epub` files
+- Non-epub selections show error: "Please select ePub files only"
+
 ```javascript
-// Response format
+// Response format from FilePicker
 [{fullPath: "/media/internal/ebooks/book.epub", size: 12345, ...}, ...]
 ```
 
@@ -137,16 +157,20 @@ Import supports multi-select - users can choose multiple ePubs and import them a
 
 | File | Purpose |
 |------|---------|
-| `app/Main.js` | App controller, library management, settings |
+| `app/Main.js` | App controller, library management, settings, About dialog |
 | `app/common/EpubRenderer.js` | Core rendering - wraps PageFitter with Enyo events |
+| `app/common/FileImporter.js` | ePub import, parsing, library persistence |
 | `app/reading/body.js` | Book view container, coordinates with EpubRenderer |
-| `app/reading/BookReader.js` | Touch handling, toolbar coordination |
+| `app/reading/BookReader.js` | Touch handling, toolbar, loading spinner |
+| `app/reading/BookReader.css` | Reader styling, dogear positioning, z-index layering |
 | `app/contentContainer/ContentNavigator.js` | Library grid/list view |
 | `app/contentContainer/ItemMenuPopup.js` | Book long-press context menu |
 | `app/userPreferences/Settings.js` | Settings popup |
+| `app/userPreferences/UserSettings.css` | Settings and About dialog styling |
 | `src/display/PageFitter.js` | Binary search pagination algorithm |
 | `src/display/HTMLBook.js` | Chunked book storage with WebSQL |
 | `src/pdb/EpubReader.js` | ePub parsing and validation |
+| `src/MojoCompat.js` | Mojo API shim (Mojo.Controller, Mojo.Event, etc.) |
 
 ---
 
@@ -155,7 +179,7 @@ Import supports multi-select - users can choose multiple ePubs and import them a
 ### 1. UTF-8 Encoding
 PageFitter encoding parameter must be `2` (UTF-8), not `0` (ASCII).
 
-### 2. Location Slider Scale
+### 2. Location Scale
 Uses fixed 0-10000 scale for `locationsTotal` instead of raw byte length.
 
 ### 3. Settings Persistence
@@ -164,8 +188,17 @@ Uses fixed 0-10000 scale for `locationsTotal` instead of raw byte length.
 ### 4. Enyo Popup Lazy Loading
 Popups that need immediate access must have `lazy: false` to be available before first open.
 
-### 5. FilePicker Response Format
-FilePicker returns an array, not a single object. Access via `response[0].fullPath`.
+### 5. FilePicker Epub Filtering
+FilePicker doesn't support extension filtering, so we filter results in `handleFilePicked()`.
+
+### 6. Dogear Button Z-Index
+Dogear button needs `z-index: 110` to be clickable above the toolbar (`z-index: 105`).
+
+### 7. About Dialog Styling
+Remove Enyo's default `border-image` and set explicit `background-color` for proper rounded corners.
+
+### 8. Mojo Compatibility
+`src/MojoCompat.js` provides shims for Mojo APIs used by pReader code (Mojo.Controller.errorDialog, etc.).
 
 ---
 
@@ -177,17 +210,20 @@ FilePicker returns an array, not a single object. Access via `response[0].fullPa
 - [x] Font size and typeface controls
 - [x] Theme switching (white/sepia/black)
 - [x] Reading position persistence
-- [x] Location slider navigation
 - [x] Table of Contents panel
 - [x] Search within book
 - [x] Cover image extraction
 - [x] Multi-select file import with progress
-- [x] Collections/categories
 - [x] Optional page turn animation
 - [x] Blank page auto-skip
 - [x] Settings persistence fix
+- [x] Loading spinner for book opening
+- [x] About dialog
+- [x] Dogear bookmark button
+- [x] FilePicker epub filtering
 
 ### Not Yet Implemented
+- [ ] Location slider navigation
 - [ ] Text selection for highlights
 - [ ] Highlight/annotation editing UI
 - [ ] Smooth scroll mode (getTriplePage)
@@ -197,30 +233,20 @@ FilePicker returns an array, not a single object. Access via `response[0].fullPa
 
 ## Reference: Original Apps
 
-### Kindle App (Enyo UI)
+### Kindle Beta App (Enyo UI)
 - Framework: Enyo 0.10
 - Used native C++ plugins (KRF, KCF) for rendering and Amazon sync
 - We kept the UI, replaced native plugins with JavaScript
 
-### Preader App (Mojo UI)
+### pReader App (Mojo UI)
 - Framework: Mojo (older webOS framework)
 - Pure JavaScript ePub engine
 - We extracted the rendering engine (`src/` directory)
 
 ---
 
-## Useful Commands
+## Git Repository
 
-```bash
-# Full build-install-launch cycle
-palm-package com.palm.codepoet.papyrus && palm-install com.palm.codepoet.papyrus_*.ipk && palm-launch com.palm.codepoet.papyrus
-
-# Watch logs in real-time
-palm-log -f com.palm.codepoet.papyrus
-
-# Check what's installed
-palm-install --list
-
-# Remove old version
-palm-install -r com.palm.codepoet.papyrus
+```
+origin: git@github.com:codepoet80/webos-papyrus-ereader.git
 ```
