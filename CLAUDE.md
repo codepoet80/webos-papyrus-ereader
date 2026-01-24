@@ -20,10 +20,14 @@ The merged app **com.webos.ereader** is functional:
 - Font controls work
 - Reading position is saved
 - Library button returns to grid view
+- **UTF-8 text encoding works correctly** (smart quotes, em-dashes, etc.)
+- **Location slider navigation works** (for newly imported books)
+- **TOC panel shows chapter bookmarks** (bookmark-based navigation)
+- **Cover images extracted from ePub** (displayed in library grid)
+- **Search in book works** (finds text with context highlighting)
 
 **Known Issues to Address:**
 - Some books have pagination imperfections (content sizing)
-- Location slider doesn't work
 - Some books with large images may have layout issues
 - Highlights/annotations not fully implemented
 
@@ -193,6 +197,80 @@ updateBookInLibrary: function(book) {
     localStorage.setItem("ereader_library", JSON.stringify(library));
 }
 ```
+
+### 8. UTF-8 Character Encoding
+
+**Problem:** Smart quotes, em-dashes, and other UTF-8 characters displayed as garbled text (`Ã¢ÂÂ` instead of apostrophes).
+
+**Solution:** The encoding parameter passed to PageFitter was `0` (ASCII) instead of `2` (UTF-8). Fixed in EpubRenderer.js:
+
+```javascript
+// EpubRenderer.js - when creating PageFitter
+self.pageFitter = new PageFitter(book, offscreenNode, 2);  // 2 = UTF-8 encoding
+```
+
+### 9. Location Slider Scale
+
+**Problem:** The location slider used mismatched scales - FileImporter set `locationsTotal` to byte length instead of the expected 0-10000 scale.
+
+**Solution:** Changed FileImporter to always use `locationsTotal: 10000`:
+
+```javascript
+// FileImporter.js
+var bookData = new BookData({
+    // ...
+    locationsTotal: 10000,  // Fixed scale 0-10000 for percentage positions
+    bookByteLength: book.getLength() || 0,  // Store actual byte length separately
+});
+```
+
+### 10. Cover Image Extraction
+
+**Problem:** Library grid showed default placeholder images instead of actual book covers.
+
+**Solution:** Added `getCoverImage()` method to EpubReader that extracts cover from manifest:
+
+```javascript
+// EpubReader.js
+EpubReader.prototype.getCoverImage = function() {
+    // Look for image with id containing "cover"
+    for (var i = 0; i < rf.images.length; i++) {
+        if (img.id && img.id.toLowerCase().indexOf("cover") !== -1) {
+            coverImage = img;
+            break;
+        }
+    }
+    // Convert to base64 data URL
+    return "data:" + mimeType + ";base64," + this.bytesToBase64(coverImage.data);
+}
+```
+
+Also updated GridView.js, ListView.js to handle data URLs for covers.
+
+### 11. TOC Panel Implementation
+
+**Problem:** Table of Contents panel was just a placeholder.
+
+**Solution:** Added `getToc()` method to EpubRenderer that extracts bookmarks from HTMLBook:
+
+```javascript
+// EpubRenderer.js
+getToc: function() {
+    var tocItems = [];
+    var bookmarks = this.htmlBook.bookmarks;
+    for (var i = 0; i < bookmarks.length; i++) {
+        var location = this.positionToLocation(bm.position);
+        tocItems.push({
+            title: this.formatBookmarkLabel(bm.label),
+            location: location,
+            position: bm.position
+        });
+    }
+    return tocItems;
+}
+```
+
+TocView fetches TOC from EpubRenderer via `window.EReaderApp` global reference.
 
 ---
 
@@ -765,16 +843,16 @@ com.mhwsoft.preader_0.8.21_all/usr/palm/applications/com.mhwsoft.preader/
 ## TODO List
 
 ### High Priority
-- [ ] Fix character/encoding problems
+- [x] Fix character/encoding problems - **DONE** (UTF-8 encoding=2 in PageFitter)
 - [ ] Work on page-turning consistency
-- [ ] Fix location slider in bottom_row.js - wire drag events to EpubRenderer.gotoLocation()
-- [ ] Wire TOC panel (SlideoutPanelViews/TocView.js) to fetch TOC from EpubReader and navigate
-- [ ] Add "Import ePub" button to library - use webOS file picker service
+- [x] Fix location slider in bottom_row.js - **DONE** (fixed scale to 10000 in FileImporter)
+- [x] Wire TOC panel (SlideoutPanelViews/TocView.js) - **DONE** (gets bookmarks from EpubRenderer)
+- [ ] Add "Import ePub" button to library - use webOS file picker service (already exists in AppMenu)
 - [ ] Test and fix pagination issues with remaining test books
 
 ### Medium Priority
-- [ ] Implement search (SlideoutPanelViews/SearchView.js) - search HTMLBook content
-- [ ] Add cover image extraction from ePub metadata for library grid
+- [x] Implement search (SlideoutPanelViews/SearchView.js) - **DONE** (EpubRenderer.searchBook())
+- [x] Add cover image extraction from ePub metadata - **DONE** (EpubReader.getCoverImage())
 - [ ] Implement text selection for highlights
 - [ ] Persist annotations to localStorage or WebSQL
 

@@ -454,9 +454,7 @@ enyo.kind({
 		this.currentLocEnd = parseInt(locSplit[1]);
 		locSplit = locationText[2].split("-");
 
-		if (this.currentPosStart != parseInt(locSplit[0])) {
-			this.doShowOverlays(false);
-		}
+		// Note: Removed doShowOverlays call here - it was causing overlays to appear after every page turn
 
 		this.currentPosStart = parseInt(locSplit[0]);
 		this.currentPosEnd = parseInt(locSplit[1]);
@@ -679,6 +677,7 @@ enyo.kind({
 	 * Navigate to next page (called from touch/swipe handlers)
 	 */
 	nextPage: function() {
+		console.log("body.nextPage: delegating to epubRenderer");
 		this.$.epubRenderer.nextPage();
 	},
 
@@ -686,6 +685,7 @@ enyo.kind({
 	 * Navigate to previous page (called from touch/swipe handlers)
 	 */
 	previousPage: function() {
+		console.log("body.previousPage: delegating to epubRenderer");
 		this.$.epubRenderer.previousPage();
 	}
 });

@@ -218,27 +218,34 @@ enyo.kind({
 
 	handleMouseDown: function(inSender, inEvent) {
 		// Handle touch/click for page turning
+		// Tap zones: left 30% = prev, right 30% = next, center 40% = overlays
 		var x = inEvent.pageX || inEvent.clientX;
+		var y = inEvent.pageY || inEvent.clientY;
 		var width = window.innerWidth;
 
-		if (x < width * 0.25) {
-			// Left quarter - previous page
+		console.log("BookReader.handleMouseDown: x=" + x + ", y=" + y + ", width=" + width + ", overlaysShowing=" + this.overlaysShowing + ", pluginReady=" + this.pluginReady);
+
+		if (x < width * 0.30) {
+			// Left 30% - previous page
 			if (!this.overlaysShowing) {
+				console.log("BookReader: Triggering PREVIOUS page");
 				this.$.body.previousPage();
 			} else {
-				// Hide overlays first, then user can turn page
+				console.log("BookReader: Hiding overlays (left tap while overlays showing)");
 				this.hideOverlays();
 			}
-		} else if (x > width * 0.75) {
-			// Right quarter - next page
+		} else if (x > width * 0.70) {
+			// Right 30% - next page
 			if (!this.overlaysShowing) {
+				console.log("BookReader: Triggering NEXT page");
 				this.$.body.nextPage();
 			} else {
-				// Hide overlays first, then user can turn page
+				console.log("BookReader: Hiding overlays (right tap while overlays showing)");
 				this.hideOverlays();
 			}
 		} else {
-			// Center - toggle overlays
+			// Center 40% - toggle overlays
+			console.log("BookReader: Center tap - toggling overlays");
 			this.showOverlays();
 		}
 	},

@@ -139,7 +139,7 @@ enyo.kind({
 				document.body.appendChild(offscreenNode);
 			}
 
-			self.pageFitter = new PageFitter(book, offscreenNode, 0);
+			self.pageFitter = new PageFitter(book, offscreenNode, 2);  // 2 = UTF-8 encoding
 
 			// Signal that the book is ready
 			self.bookReady = true;
@@ -216,7 +216,7 @@ enyo.kind({
 					self.log("Book loaded. Total length: " + self.totalLength);
 
 					// Create the PageFitter
-					self.pageFitter = new PageFitter(book, self.$.offscreen.hasNode(), 0);
+					self.pageFitter = new PageFitter(book, self.$.offscreen.hasNode(), 2);  // 2 = UTF-8 encoding
 
 					// Signal that the book is ready
 					self.bookReady = true;
@@ -317,14 +317,21 @@ enyo.kind({
 	 * Navigate to next page
 	 */
 	nextPage: function() {
-		if (!this.bookReady) return;
+		console.log("EpubRenderer.nextPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no"));
+		if (!this.bookReady) {
+			console.log("EpubRenderer.nextPage: ABORTED - book not ready");
+			return;
+		}
 
 		var screenHeight = this.getScreenHeight();
+		console.log("EpubRenderer.nextPage: screenHeight=" + screenHeight + ", calling pageFitter.getNextPage");
 		var self = this;
 
 		this.pageFitter.getNextPage(screenHeight, function(html) {
+			console.log("EpubRenderer.nextPage callback: html=" + (html === null ? "null" : "length " + html.length));
 			if (html === null) {
 				// End of book
+				console.log("EpubRenderer.nextPage: END OF BOOK reached");
 				self.doEndOfBook("false");
 				return;
 			}
@@ -336,14 +343,21 @@ enyo.kind({
 	 * Navigate to previous page
 	 */
 	previousPage: function() {
-		if (!this.bookReady) return;
+		console.log("EpubRenderer.previousPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no"));
+		if (!this.bookReady) {
+			console.log("EpubRenderer.previousPage: ABORTED - book not ready");
+			return;
+		}
 
 		var screenHeight = this.getScreenHeight();
+		console.log("EpubRenderer.previousPage: screenHeight=" + screenHeight + ", calling pageFitter.getPrevPage");
 		var self = this;
 
 		this.pageFitter.getPrevPage(screenHeight, function(html) {
+			console.log("EpubRenderer.previousPage callback: html=" + (html === null ? "null" : "length " + html.length));
 			if (html === null) {
 				// Beginning of book
+				console.log("EpubRenderer.previousPage: BEGINNING OF BOOK reached");
 				self.doEndOfBook("true");
 				return;
 			}
@@ -355,13 +369,20 @@ enyo.kind({
 	 * Refresh/redraw the current page
 	 */
 	refreshPage: function() {
-		if (!this.bookReady) return;
+		console.log("EpubRenderer.refreshPage: bookReady=" + this.bookReady);
+		if (!this.bookReady) {
+			console.log("EpubRenderer.refreshPage: ABORTED - book not ready");
+			return;
+		}
 
 		var screenHeight = this.getScreenHeight();
+		console.log("EpubRenderer.refreshPage: screenHeight=" + screenHeight);
 		var self = this;
 
 		this.pageFitter.getCurrPage(screenHeight, function(html) {
+			console.log("EpubRenderer.refreshPage callback: html=" + (html === null ? "null" : "length " + html.length));
 			if (html === null) {
+				console.log("EpubRenderer.refreshPage: FAILED to render page");
 				self.doKrfPluginError("Failed to render page");
 				return;
 			}
@@ -509,10 +530,236 @@ enyo.kind({
 	},
 
 	/**
-	 * Reset search (not implemented)
+	 * Reset search
 	 */
 	resetSearch: function() {
-		this.log("resetSearch (not implemented)");
+		this.searchResults = [];
+		this.log("Search reset");
+	},
+
+	/**
+	 * Search for text in the book content
+	 * @param {String} searchText - Text to search for
+	 * @param {Function} callback - Called with array of {text, location, position} results
+	 */
+	searchBook: function(searchText, callback) {
+		if (!this.htmlBook || !searchText || searchText.length < 2) {
+			callback([]);
+			return;
+		}
+
+		var self = this;
+		var results = [];
+		var searchLower = searchText.toLowerCase();
+		var maxResults = 50;
+		var chunkSize = 4096;
+		var totalLength = this.totalLength;
+		var currentPos = 0;
+		var contextChars = 40;  // Characters of context on each side
+
+		// Search function that processes chunks
+		var searchChunk = function() {
+			if (currentPos >= totalLength || results.length >= maxResults) {
+				// Done searching
+				self.searchResults = results;
+				callback(results);
+				return;
+			}
+
+			// Read a chunk
+			var readLength = Math.min(chunkSize, totalLength - currentPos);
+			self.htmlBook.read(currentPos, readLength, function(byteBuf) {
+				if (!byteBuf || byteBuf.length === 0) {
+					// Move to next chunk
+					currentPos += chunkSize - 100;  // Overlap to catch matches at boundaries
+					setTimeout(searchChunk, 0);
+					return;
+				}
+
+				// Convert bytes to text (stripping HTML tags)
+				var text = self.bytesToText(byteBuf);
+				var textLower = text.toLowerCase();
+
+				// Search for matches
+				var index = 0;
+				while ((index = textLower.indexOf(searchLower, index)) !== -1) {
+					if (results.length >= maxResults) break;
+
+					// Get surrounding context
+					var start = Math.max(0, index - contextChars);
+					var end = Math.min(text.length, index + searchText.length + contextChars);
+					var contextText = text.substring(start, end);
+
+					// Add ellipsis if truncated
+					if (start > 0) contextText = "..." + contextText;
+					if (end < text.length) contextText = contextText + "...";
+
+					// Highlight the match
+					var highlightStart = (start > 0 ? 3 : 0) + (index - start);
+					var beforeMatch = contextText.substring(0, highlightStart);
+					var match = contextText.substring(highlightStart, highlightStart + searchText.length);
+					var afterMatch = contextText.substring(highlightStart + searchText.length);
+					contextText = beforeMatch + "<b>" + match + "</b>" + afterMatch;
+
+					// Calculate position in book
+					var matchPosition = currentPos + index;
+					var matchLocation = self.positionToLocation(matchPosition);
+
+					results.push({
+						text: contextText,
+						location: matchLocation,
+						position: matchPosition
+					});
+
+					index += searchText.length;
+				}
+
+				// Move to next chunk (with overlap)
+				currentPos += chunkSize - 100;
+				setTimeout(searchChunk, 0);
+			});
+		};
+
+		// Start searching
+		searchChunk();
+	},
+
+	/**
+	 * Convert byte buffer to plain text (strip HTML)
+	 */
+	bytesToText: function(byteBuf) {
+		var text = "";
+		for (var i = 0; i < byteBuf.length; i++) {
+			var c = byteBuf[i];
+			if (c >= 32 && c < 127) {
+				text += String.fromCharCode(c);
+			} else if (c === 10 || c === 13) {
+				text += " ";
+			}
+		}
+		// Strip HTML tags
+		text = text.replace(/<[^>]*>/g, " ");
+		// Normalize whitespace
+		text = text.replace(/\s+/g, " ");
+		return text;
+	},
+
+	/**
+	 * Get Table of Contents from HTMLBook bookmarks
+	 * Returns array of {title, location, position} objects
+	 */
+	getToc: function() {
+		if (!this.htmlBook || !this.htmlBook.bookmarks) {
+			return [];
+		}
+
+		var tocItems = [];
+		var bookmarks = this.htmlBook.bookmarks;
+
+		for (var i = 0; i < bookmarks.length; i++) {
+			var bm = bookmarks[i];
+			if (bm && bm.label && bm.position !== undefined) {
+				// Convert byte position to location (0-10000)
+				var location = this.positionToLocation(bm.position);
+
+				// Create a display title from the label
+				// Labels are typically anchor ids like "chapter1", "part2_section3", etc.
+				var title = this.formatBookmarkLabel(bm.label);
+
+				tocItems.push({
+					title: title,
+					label: bm.label,
+					location: location,
+					position: bm.position
+				});
+			}
+		}
+
+		// Sort by position
+		tocItems.sort(function(a, b) {
+			return a.position - b.position;
+		});
+
+		// Filter to only include likely chapter markers (skip small anchors)
+		// This is a heuristic - we keep entries that are spaced reasonably apart
+		var filteredToc = [];
+		var lastPosition = -10000;
+		var minSpacing = Math.floor(this.totalLength / 100); // At least 1% apart
+
+		for (var i = 0; i < tocItems.length; i++) {
+			var item = tocItems[i];
+			// Include if it's at the beginning, or spaced far enough from the last
+			if (item.position < 1000 || (item.position - lastPosition) > minSpacing) {
+				// Only include items with reasonable-looking labels
+				if (this.isLikelyChapterLabel(item.label)) {
+					filteredToc.push(item);
+					lastPosition = item.position;
+				}
+			}
+		}
+
+		this.tocAvailable = filteredToc.length > 0;
+		return filteredToc;
+	},
+
+	/**
+	 * Format a bookmark label into a readable title
+	 */
+	formatBookmarkLabel: function(label) {
+		if (!label) return "Unknown";
+
+		// Common patterns to clean up
+		var title = label
+			.replace(/[-_]/g, ' ')           // Replace dashes/underscores with spaces
+			.replace(/([a-z])([A-Z])/g, '$1 $2')  // Add space before capitals
+			.replace(/([0-9]+)/g, ' $1 ')    // Add space around numbers
+			.replace(/\s+/g, ' ')            // Normalize spaces
+			.trim();
+
+		// Capitalize first letter of each word
+		title = title.replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+
+		// If it's too short or just a number, make it more descriptive
+		if (title.length < 3 || /^[0-9\s]+$/.test(title)) {
+			title = "Section " + label;
+		}
+
+		return title;
+	},
+
+	/**
+	 * Check if a label is likely a chapter/section marker
+	 */
+	isLikelyChapterLabel: function(label) {
+		if (!label) return false;
+
+		var lowerLabel = label.toLowerCase();
+
+		// Positive indicators - looks like a chapter marker
+		var chapterPatterns = [
+			/^ch(apter)?/,    // chapter, ch1, etc.
+			/^part/,          // part1, part_2, etc.
+			/^section/,       // section
+			/^book/,          // book1, etc.
+			/^calibre/,       // calibre-generated IDs
+			/^id[0-9]/,       // id1, id2, etc.
+			/^toc/,           // toc references
+			/^[a-z]+[0-9]+$/, // word followed by number
+			/^[0-9]+$/        // just a number
+		];
+
+		for (var i = 0; i < chapterPatterns.length; i++) {
+			if (chapterPatterns[i].test(lowerLabel)) {
+				return true;
+			}
+		}
+
+		// If it has more than 5 characters and starts with a letter, include it
+		if (label.length > 5 && /^[a-zA-Z]/.test(label)) {
+			return true;
+		}
+
+		return false;
 	},
 
 	// ========================================

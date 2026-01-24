@@ -48,10 +48,15 @@ enyo.kind({
 		this.$.author.setContent(this.book.author || "");
 
 		var coverPath = this.book.coverImagePath;
+		var isDataUrl = coverPath && coverPath.indexOf("data:") === 0;
+
 		if (!coverPath || coverPath.length === 0) {
-			coverPath = "images/item-cover-default.png";
+			coverPath = "images/item-cover-default-small.png";
+		} else if (!isDataUrl) {
+			// Only modify path for file URLs (not data URLs)
+			coverPath = coverPath.replace(/.png$/i, "-small.png").replace(/.jpg$/i, "-small.jpg");
 		}
-		coverPath = coverPath.replace(/.png$/i, "-small.png").replace(/.jpg$/i, "-small.jpg");
+		// Data URLs are used as-is
 		this.$.coverImage.setSrc(coverPath);
 
 		// Show progress indicators if we have location info

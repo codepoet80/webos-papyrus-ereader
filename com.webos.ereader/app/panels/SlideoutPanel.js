@@ -148,9 +148,21 @@ enyo.kind({
 	tocItems: [],
 
 	bookChanged: function() {
-		// In a real implementation, we would extract TOC from the ePub
-		// For now, show empty message
+		// Fetch TOC from EpubRenderer via the global app reference
 		this.tocItems = [];
+
+		try {
+			var app = window.EReaderApp;
+			if (app && app.$.reader && app.$.reader.$.body && app.$.reader.$.body.$.epubRenderer) {
+				var renderer = app.$.reader.$.body.$.epubRenderer;
+				if (renderer.getToc) {
+					this.tocItems = renderer.getToc();
+				}
+			}
+		} catch (e) {
+			console.log("TocView: Error getting TOC: " + e);
+		}
+
 		this.rebuildTocList();
 	},
 
@@ -304,12 +316,36 @@ enyo.kind({
 
 		this.doSearchQueried(searchText);
 
-		// In a real implementation, we would search through the HTMLBook content
-		// For now, show no results
+		// Show searching message
+		this.$.emptyMessage.setContent($L("Searching..."));
+		this.$.emptyMessage.show();
+		this.$.noResults.hide();
 		this.results = [];
 		this.rebuildResultsList();
-		this.$.emptyMessage.hide();
-		this.$.noResults.setShowing(this.results.length === 0);
+
+		// Get EpubRenderer and search
+		var self = this;
+		try {
+			var app = window.EReaderApp;
+			if (app && app.$.reader && app.$.reader.$.body && app.$.reader.$.body.$.epubRenderer) {
+				var renderer = app.$.reader.$.body.$.epubRenderer;
+				renderer.searchBook(searchText, function(results) {
+					self.results = results;
+					self.rebuildResultsList();
+					self.$.emptyMessage.setContent($L("Enter a search term above."));
+					self.$.emptyMessage.hide();
+					self.$.noResults.setShowing(results.length === 0);
+				});
+			} else {
+				// No renderer available
+				this.$.emptyMessage.setContent($L("Open a book first to search."));
+				this.$.emptyMessage.show();
+			}
+		} catch (e) {
+			console.log("SearchView: Error searching: " + e);
+			this.$.emptyMessage.setContent($L("Search error."));
+			this.$.emptyMessage.show();
+		}
 	},
 
 	rebuildResultsList: function() {
@@ -323,7 +359,7 @@ enyo.kind({
 				owner: this,
 				result: result,
 				components: [
-					{content: result.text, className: "search-result-text"}
+					{content: result.text, className: "search-result-text", allowHtml: true}
 				]
 			});
 		}

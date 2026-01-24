@@ -106,12 +106,10 @@ HTMLBook.prototype.dbOpenReplace = function(data) {
 }
 
 HTMLBook.prototype.dbOpenLoad = function(data) {
-	//console.log("dbOpenLoad");
+	console.log("HTMLBook.dbOpenLoad: loading metadata from database");
 	var fail = function(msg) {
 		//There is no metadata
-		console.warn("Attempted to load an HTMLBookDB, " +
-			"but there was no Metadata entry."
-		);
+		console.warn("HTMLBook.dbOpenLoad FAILED: " + msg);
 		this.isReady = false;
 		this.callback(this);
 	}.bind(this);
@@ -132,13 +130,14 @@ HTMLBook.prototype.dbOpenLoad = function(data) {
 	this.numBuffers = meta.numBuffers;
 	this.bufferOffsets = meta.bufferOffsets;
 	this.bookmarks = meta.bookmarks;
-	
+
+	console.log("HTMLBook.dbOpenLoad: SUCCESS - length=" + this.length + ", numBuffers=" + this.numBuffers + ", bufferOffsets.length=" + this.bufferOffsets.length + ", bookmarks=" + this.bookmarks.length);
+
 	//Flagging ourselves as ready
 	this.isReady = true;
 	//Calling the callback
-	//console.log("Calling the callback");
 	this.callback(this);
-	
+
 }
 
 HTMLBook.prototype.dbOpenFail = function() {
@@ -369,34 +368,32 @@ HTMLBook.prototype.getLoadProgress = function() {
 // ~~~ Rich Text Fetching methods ~~~
 
 HTMLBook.prototype.read = function(start, length, callback) {
-	console.log("HTMLBook.read: start=" + start + ", length=" + length + ", totalLength=" + this.getLength() + ", numBuffers=" + this.bufferOffsets.length);
+	console.log("HTMLBook.read: start=" + start + ", length=" + length + ", totalLength=" + this.getLength() + ", numBuffers=" + this.numBuffers + ", bufferOffsets.length=" + this.bufferOffsets.length);
 	//Sanity check
 	if (typeof(callback) == "undefined") {
 		console.error("HTMLBook.read() absolutely needs a callback.")
 		return null;
 	}
 	if (start < 0 || length < 0 || start > this.getLength()) {
-		console.log("HTMLBook.read: invalid params, calling callback with null");
-		callback(null);
+		console.log("HTMLBook.read: invalid params (start=" + start + ", length=" + length + ", bookLen=" + this.getLength() + "), calling callback with empty array");
+		callback([]);
 		return null;
 	}
 	//Sanitizing the length
-	length = Math.min(length, this.getLength());
-	
-	//console.log("start = " + start);
-	//console.log("length = " + length);
-	
+	length = Math.min(length, this.getLength() - start);
+
 	//At first, we determine which buffers we must get
 	var startChunk = this.getBufferContainment(start);
 	var endChunk = this.getBufferContainment(start + length);
-	
-	//console.log("StartCh = " + startChunk + "; EndCh = " + endChunk);
-	
+
+	console.log("HTMLBook.read: startChunk=" + startChunk + ", endChunk=" + endChunk);
+
 	//Checking if we can fetch anything at all
 	if (startChunk < 0 || startChunk >= this.bufferOffsets.length ||
 			endChunk < 0 || endChunk >= this.bufferOffsets.length) {
-		//This shouldn't happen
-		console.warn("Invalid HTMLBook read chunks.")
+		//This shouldn't happen - but we MUST call callback to avoid hanging
+		console.error("HTMLBook.read: Invalid chunks! startChunk=" + startChunk + ", endChunk=" + endChunk + ", bufferOffsets.length=" + this.bufferOffsets.length);
+		callback([]);
 		return null;
 	}
 	
@@ -637,10 +634,12 @@ HTMLBook.prototype.saveBufferData = function(bufferNum, buffer, callback) {
  * @param {Object} callback the function to call once the buffer is loaded.
  */
 HTMLBook.prototype.loadBufferData = function(bufferNum, callback) {
-	//console.log("Attempting to load buffer " + bufferNum);
+	console.log("HTMLBook.loadBufferData: bufferNum=" + bufferNum + ", numBuffers=" + this.numBuffers);
 	//Sanity check
 	if (bufferNum < 0 || bufferNum >= this.numBuffers) {
+		console.error("HTMLBook.loadBufferData: Invalid bufferNum=" + bufferNum + " (numBuffers=" + this.numBuffers + ")");
 		callback(null);
+		return;  // Bug fix: was missing return!
 	}
 	
 	//Checking if we've buffered that number
@@ -657,9 +656,9 @@ HTMLBook.prototype.loadBufferData = function(bufferNum, callback) {
 	this.bookDB.read(
 		name,
 		function(num, data) {
-			//console.log("loadBufferData okay.");
 			//Checking if there was such a buffer
 			if (data && data != null) {
+				console.log("HTMLBook.loadBufferData: loaded buffer " + num + ", data length=" + (data[0] ? data[0].length : 0));
 				//Creating a new buffer and copying the values
 				var buf = new HTMLBuffer(null);
 				buf.loadFromSaveState(data[0]);
@@ -674,6 +673,7 @@ HTMLBook.prototype.loadBufferData = function(bufferNum, callback) {
 				callback(buf);
 			} else {
 				//Failure to load
+				console.error("HTMLBook.loadBufferData: FAILED to load buffer " + num + " from database!");
 				callback(null);
 			}
 		}.bind(this, bufferNum)

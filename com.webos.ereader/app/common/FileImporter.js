@@ -79,6 +79,19 @@ FileImporter.prototype.importEpub = function(filePath, callback) {
 
 			console.log("Book metadata: title=" + metadata.title + ", author=" + metadata.author);
 
+			// Extract cover image
+			var coverImageData = null;
+			try {
+				coverImageData = reader.getCoverImage();
+				if (coverImageData) {
+					console.log("Cover image extracted, length=" + coverImageData.length);
+				} else {
+					console.log("No cover image found");
+				}
+			} catch (e) {
+				console.log("Error extracting cover: " + e);
+			}
+
 			// Generate a unique database name
 			var dbName = "ereader_" + self.generateUniqueId(filePath);
 
@@ -101,8 +114,10 @@ FileImporter.prototype.importEpub = function(filePath, callback) {
 					language: metadata.language || "",
 					bookFilePath: filePath,
 					bookDbName: dbName,
+					coverImagePath: coverImageData || "",  // Store cover as data URL
 					locationsCompleted: 0,
-					locationsTotal: book.getLength() || 10000,
+					locationsTotal: 10000,  // Fixed scale 0-10000 for percentage positions
+					bookByteLength: book.getLength() || 0,  // Store actual byte length separately
 					dateAdded: Date.now(),
 					lastAccessed: Date.now()
 				});

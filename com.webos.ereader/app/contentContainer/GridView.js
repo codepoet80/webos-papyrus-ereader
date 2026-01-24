@@ -30,20 +30,29 @@ enyo.kind({
 		if (!this.book) return;
 
 		var coverPath = this.book.coverImagePath;
+		var isDataUrl = coverPath && coverPath.indexOf("data:") === 0;
+		var isDefaultCover = false;
+
 		if (!coverPath || coverPath.length === 0) {
 			coverPath = "images/item-cover-default.png";
+			isDefaultCover = true;
 		}
 
 		// Show title if using default cover
-		if (coverPath === "images/item-cover-default.png") {
+		if (isDefaultCover) {
 			this.$.title.setContent(this.book.title || "");
 			this.$.title.show();
 		} else {
 			this.$.title.hide();
 		}
 
-		// Try medium size image
-		coverPath = coverPath.replace(/.png$/i, "-medium.png").replace(/.jpg$/i, "-medium.jpg");
+		// Only modify path for file URLs (not data URLs)
+		if (!isDataUrl && !isDefaultCover) {
+			coverPath = coverPath.replace(/.png$/i, "-medium.png").replace(/.jpg$/i, "-medium.jpg");
+		} else if (isDefaultCover) {
+			coverPath = "images/item-cover-default-medium.png";
+		}
+		// Data URLs are used as-is
 		this.$.coverImage.setSrc(coverPath);
 
 		// Show markup count if any

@@ -49,8 +49,15 @@ enyo.kind({
 		if (!this.book) return;
 
 		// Set book header
-		var coverPath = this.book.coverImagePath || "images/item-cover-default.png";
-		coverPath = coverPath.replace(/.png$/i, "-small.png").replace(/.jpg$/i, "-small.jpg");
+		var coverPath = this.book.coverImagePath;
+		var isDataUrl = coverPath && coverPath.indexOf("data:") === 0;
+
+		if (!coverPath || coverPath.length === 0) {
+			coverPath = "images/item-cover-default-small.png";
+		} else if (!isDataUrl) {
+			coverPath = coverPath.replace(/.png$/i, "-small.png").replace(/.jpg$/i, "-small.jpg");
+		}
+		// Data URLs are used as-is
 		this.$.itemHeaderImage.setSrc(coverPath);
 		this.$.itemHeaderTitle.setContent(this.book.title || "");
 

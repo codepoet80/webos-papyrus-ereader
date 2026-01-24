@@ -742,6 +742,89 @@ EpubReader.prototype.getMetadata = function() {
 	return metadata;
 }
 
+/**
+ * Returns the cover image data as a base64 data URL, or null if no cover found.
+ * Looks for cover in this order:
+ * 1. Image with id containing "cover"
+ * 2. First image in the manifest
+ */
+EpubReader.prototype.getCoverImage = function() {
+	if (this.structure.rfData.length <= 0) {
+		return null;
+	}
+
+	var rf = this.structure.rfData[0];
+	if (!rf.images || rf.images.length === 0) {
+		return null;
+	}
+
+	var coverImage = null;
+
+	// Look for an image with id containing "cover"
+	for (var i = 0; i < rf.images.length; i++) {
+		var img = rf.images[i];
+		if (img.id && img.id.toLowerCase().indexOf("cover") !== -1) {
+			coverImage = img;
+			break;
+		}
+	}
+
+	// Fall back to first image
+	if (!coverImage) {
+		coverImage = rf.images[0];
+	}
+
+	// Check if we have data
+	if (!coverImage || !coverImage.data || coverImage.data.length === 0) {
+		return null;
+	}
+
+	// Convert to base64 data URL
+	var mimeType = coverImage.type || "image/jpeg";
+	var base64 = this.bytesToBase64(coverImage.data);
+
+	return "data:" + mimeType + ";base64," + base64;
+}
+
+/**
+ * Convert byte array to base64 string
+ */
+EpubReader.prototype.bytesToBase64 = function(bytes) {
+	var binary = "";
+	for (var i = 0; i < bytes.length; i++) {
+		binary += String.fromCharCode(bytes[i]);
+	}
+	// Use btoa if available (modern browsers), otherwise manual encoding
+	if (typeof btoa === "function") {
+		return btoa(binary);
+	}
+	// Manual base64 encoding for older environments
+	var base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	var result = "";
+	var i = 0;
+	while (i < binary.length) {
+		var a = binary.charCodeAt(i++) || 0;
+		var b = binary.charCodeAt(i++) || 0;
+		var c = binary.charCodeAt(i++) || 0;
+
+		var b1 = (a >> 2) & 0x3F;
+		var b2 = ((a & 0x3) << 4) | ((b >> 4) & 0xF);
+		var b3 = ((b & 0xF) << 2) | ((c >> 6) & 0x3);
+		var b4 = c & 0x3F;
+
+		if (isNaN(b)) {
+			b3 = b4 = 64;
+		} else if (isNaN(c)) {
+			b4 = 64;
+		}
+
+		result += base64chars.charAt(b1) + base64chars.charAt(b2);
+		result += (b3 === 64 ? "=" : base64chars.charAt(b3));
+		result += (b4 === 64 ? "=" : base64chars.charAt(b4));
+	}
+	return result;
+}
+
 // ~~~ TEXT & IMAGE RETRIEVAL ~~~
 
 /**

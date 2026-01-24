@@ -88,6 +88,9 @@ enyo.kind({
 
 		enyo.keyboard.setResizesWindow(false);
 
+		// Migrate old library data (fix locationsTotal scale)
+		this.migrateLibraryData();
+
 		// Initialize the library
 		this.library = new Library("ereader_lib", enyo.bind(this, "libraryLoaded"));
 
@@ -96,6 +99,42 @@ enyo.kind({
 
 		// Load saved settings
 		this.loadSettings();
+	},
+
+	/**
+	 * Migrate old library data to fix locationsTotal scale issue.
+	 * Old imports stored byte length instead of normalized 0-10000 scale.
+	 */
+	migrateLibraryData: function() {
+		try {
+			var libraryJson = localStorage.getItem("ereader_library");
+			if (!libraryJson) return;
+
+			var library = JSON.parse(libraryJson);
+			var migrated = false;
+
+			for (var i = 0; i < library.length; i++) {
+				var book = library[i];
+				// If locationsTotal > 10000, it's using the old byte-length scale
+				if (book.locationsTotal && book.locationsTotal > 10000) {
+					console.log("Migrating book '" + book.title + "': locationsTotal " + book.locationsTotal + " -> 10000");
+					// Convert locationsCompleted from byte position to 0-10000 scale
+					if (book.locationsCompleted && book.locationsCompleted > 0) {
+						var oldPercent = book.locationsCompleted / book.locationsTotal;
+						book.locationsCompleted = Math.floor(oldPercent * 10000);
+					}
+					book.locationsTotal = 10000;
+					migrated = true;
+				}
+			}
+
+			if (migrated) {
+				localStorage.setItem("ereader_library", JSON.stringify(library));
+				console.log("Library migration complete");
+			}
+		} catch (e) {
+			console.log("Library migration error: " + e);
+		}
 	},
 
 	rendered: function() {
@@ -155,8 +194,6 @@ enyo.kind({
 			self.importMultipleBooks(newFiles);
 		} else {
 			self.log("No new ePub files to import");
-			// DEBUG: Auto-open first book for testing (disabled)
-			// self.debugAutoOpenBook();
 		}
 	},
 
@@ -418,6 +455,19 @@ enyo.kind({
 		} catch (e) {
 			this.log("Failed to save reading position: " + e);
 		}
+	},
+
+	/**
+	 * Refresh library after clearing - rescans and reimports books
+	 */
+	refreshLibrary: function() {
+		this.log("Refreshing library...");
+		// Rebuild the view (will show empty)
+		if (this.$.navigator) {
+			this.$.navigator.rebuildView();
+		}
+		// Rescan for books to import
+		this.scanForNewBooks();
 	},
 
 	// ========================================

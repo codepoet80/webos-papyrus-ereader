@@ -12,12 +12,11 @@
 
 .epub-page-container {
 	position: absolute;
-	top: 20px;
+	top: 50px;
 	left: 30px;
 	right: 30px;
-	bottom: 20px;
-	overflow: auto;
-	-webkit-overflow-scrolling: touch;
+	bottom: 55px;
+	overflow: hidden;
 	line-height: 1.6;
 	text-align: justify;
 	font-size: 18px;
