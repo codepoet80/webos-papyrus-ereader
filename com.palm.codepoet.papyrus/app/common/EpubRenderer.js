@@ -355,8 +355,10 @@ enyo.kind({
 	 * Internal next page with blank page skip counter
 	 */
 	nextPageInternal: function(blankSkipCount) {
-		console.log("EpubRenderer.nextPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no"));
-		if (!this.bookReady || this.isAnimating) {
+		console.log("EpubRenderer.nextPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no") + ", blankSkipCount=" + blankSkipCount);
+		// Only check isAnimating on initial call (blankSkipCount === 0)
+		// Recursive calls for blank page skipping should proceed even if animating
+		if (!this.bookReady || (blankSkipCount === 0 && this.isAnimating)) {
 			console.log("EpubRenderer.nextPage: ABORTED - book not ready or animating");
 			return;
 		}

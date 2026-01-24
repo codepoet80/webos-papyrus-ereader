@@ -98,18 +98,37 @@ ZipFile.prototype.parseDirectory = function() {
 ZipFile.prototype.scanBackwardForMagic = function(magic, startPos) {
     var currPos = startPos;
     var toMatch = magic.length - 1;
-    var chunkSz = 128;
+    var chunkSz = 1024;  // Larger chunks for efficiency
+    console.log("scanBackwardForMagic: startPos=" + startPos + ", looking for magic bytes");
+
     while (currPos >= 0) {
-        var start = Math.max(0, currPos - chunkSz);
-        var bytes = this.file.read(start, currPos - start);
-        if (!bytes) break;
-        for (var i = bytes.length-1; i >= 0; i -= 1) {
+        var start = Math.max(0, currPos - chunkSz + 1);  // +1 so chunk includes currPos
+        var len = currPos - start + 1;
+        var bytes = this.file.read(start, len);
+
+        if (!bytes) {
+            console.log("scanBackwardForMagic: read returned null at start=" + start + ", len=" + len);
+            break;
+        }
+
+        console.log("scanBackwardForMagic: chunk start=" + start + ", len=" + len + ", bytes.length=" + bytes.length);
+
+        // Debug: show last few bytes of file on first chunk
+        if (currPos == startPos && bytes.length >= 4) {
+            var lastBytes = [];
+            for (var j = bytes.length - 4; j < bytes.length; j++) {
+                lastBytes.push(bytes[j].toString(16));
+            }
+            console.log("scanBackwardForMagic: last 4 bytes of file: " + lastBytes.join(" "));
+        }
+
+        for (var i = bytes.length - 1; i >= 0; i -= 1) {
             if (bytes[i] != magic[toMatch]) {
                 //Resetting toMatch
                 toMatch = magic.length - 1;
-                //Checking if the first byte matched
+                //Checking if this byte could start a new match
                 if (bytes[i] == magic[toMatch]) {
-                    toMatch = magic.length - 1;
+                    toMatch -= 1;  // Start matching from this byte
                 }
             } else {
                 toMatch -= 1;
@@ -120,11 +139,15 @@ ZipFile.prototype.scanBackwardForMagic = function(magic, startPos) {
         if (toMatch < 0) {
             //We matched the header!
             currPos = start + i;
+            console.log("scanBackwardForMagic: FOUND at position " + currPos);
             break;
         } else {
-            currPos -= chunkSz;
+            // Move to process the chunk before this one (no overlap)
+            currPos = start - 1;
         }
     }
+
+    console.log("scanBackwardForMagic: returning " + currPos);
     //If something was found, currPos is >= 0
     return currPos;
 }

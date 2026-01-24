@@ -65,7 +65,7 @@ enyo.kind({
 		// Spinner popup for loading with progress text
 		{name: "spinnerPopup", kind: "Popup", className: "spinner-popup", lazy: false, dismissWithClick: false, modal: true, scrim: true, components: [
 			{kind: "VFlexBox", align: "center", components: [
-				{kind: "SpinnerLarge"},
+				{kind: "Spinner", name: "importSpinner", showing: true},
 				{name: "spinnerText", content: "Loading...", style: "color: white; margin-top: 10px; font-size: 16px;"}
 			]}
 		]},
@@ -73,14 +73,49 @@ enyo.kind({
 		// File picker for importing ePubs (multi-select enabled)
 		{kind: "FilePicker", name: "filePicker", fileType: ["document"], allowMultiSelect: true, onPickFile: "handleFilePicked"},
 
+		// Custom file picker popup (for use with filemgr service)
+		{name: "epubPickerPopup", kind: "Popup", scrim: true, lazy: false, className: "settingsBox", width: "500px", style: "padding: 20px; height: 500px;", components: [
+			{kind: "VFlexBox", style: "height: 100%;", components: [
+				{content: $L("Select ePub Files"), className: "loginFormTitle"},
+				{content: $L("Tap files to select them for import"), className: "loginFormDescription"},
+				{kind: "Scroller", name: "epubPickerScroller", flex: 1, style: "height: 340px;", components: [
+					{kind: "VFlexBox", components: [
+						{kind: "RowGroup", name: "epubFileGroup", components: [
+							{kind: "VirtualRepeater", name: "epubFileRepeater", onSetupRow: "setupEpubFileRow", components: [
+								{kind: "Item", name: "epubFileItem", layoutKind: "HFlexLayout", align: "center", tapHighlight: true, onclick: "toggleEpubFileSelection", components: [
+									{kind: "CheckBox", name: "epubFileCheckbox", onclick: "epubCheckboxClicked"},
+									{kind: "VFlexBox", flex: 1, style: "margin-left: 10px; overflow: hidden;", components: [
+										{name: "epubFileName", style: "font-size: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"},
+										{name: "epubFilePath", style: "font-size: 12px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"}
+									]},
+									{name: "epubFileSize", style: "color: #666; font-size: 14px; margin-left: 10px;"}
+								]}
+							]}
+						]}
+					]}
+				]},
+				{name: "epubPickerEmpty", content: $L("No ePub files found. Try placing .epub files in /media/internal/ebooks/"), className: "loginFormDescription", style: "text-align: center; padding: 40px 0;", showing: false},
+				{kind: "HFlexBox", style: "margin-top: 10px;", components: [
+					{kind: "Button", content: $L("Cancel"), flex: 1, className: "enyo-button-light", onclick: "cancelEpubPicker"},
+					{kind: "Button", name: "importSelectedBtn", content: $L("Import Selected"), flex: 1, className: "enyo-button-dark", onclick: "importSelectedEpubs", disabled: true}
+				]}
+			]}
+		]},
+
 		// Palm services
 		{name: "openBrowser", kind: enyo.PalmService, service: "palm://com.palm.applicationManager/", method: "launch"},
-		{name: "DimService", kind: "PalmService", service: "palm://com.palm.display/control/"}
+		{name: "DimService", kind: "PalmService", service: "palm://com.palm.display/control/"},
+		{name: "listAppsService", kind: "PalmService", service: "palm://com.palm.applicationManager/", method: "listApps", onResponse: "handleListAppsResponse"},
+		{name: "fileMgrService", kind: "PalmService", service: "palm://ca.canucksoftware.filemgr/", method: "listFiles", onResponse: "handleFileMgrResponse"},
+		{name: "mediaRescanService", kind: "PalmService", service: "palm://com.palm.db/", method: "find"}
 	],
 
 	// Internal state
 	library: null,
 	configData: {},
+	fileMgrAvailable: null,  // null = not checked, true/false = checked
+	epubFilesFound: [],      // Files found by filemgr for custom picker
+	epubFilesSelected: {},   // Map of selected file paths
 
 	create: function() {
 		this.inherited(arguments);
@@ -315,18 +350,38 @@ enyo.kind({
 			text = "Importing book " + current + " of " + total + "...";
 		}
 		this.log("showImportProgress: " + text);
+		this.showSpinnerPopup(text);
+	},
+
+	hideImportProgress: function() {
+		this.log("hideImportProgress");
+		this.hideSpinnerPopup();
+	},
+
+	/**
+	 * Show spinner popup with message
+	 */
+	showSpinnerPopup: function(message) {
 		if (this.$.spinnerText) {
-			this.$.spinnerText.setContent(text);
+			this.$.spinnerText.setContent(message || "Loading...");
+		}
+		if (this.$.importSpinner) {
+			this.$.importSpinner.show();
 		}
 		if (this.$.spinnerPopup) {
 			this.$.spinnerPopup.openAtCenter();
 		}
 	},
 
-	hideImportProgress: function() {
-		this.log("hideImportProgress");
+	/**
+	 * Hide spinner popup
+	 */
+	hideSpinnerPopup: function() {
 		if (this.$.spinnerPopup) {
 			this.$.spinnerPopup.close();
+		}
+		if (this.$.importSpinner) {
+			this.$.importSpinner.hide();
 		}
 	},
 
@@ -523,7 +578,275 @@ enyo.kind({
 	// ========================================
 
 	showFilePicker: function() {
-		this.$.filePicker.pickFile();
+		// Check if filemgr is available (first time only)
+		if (this.fileMgrAvailable === null) {
+			this.checkForFileMgr();
+		} else if (this.fileMgrAvailable) {
+			this.showFileMgrPicker();
+		} else {
+			this.showFilePickerWithRescan();
+		}
+	},
+
+	/**
+	 * Check if ca.canucksoftware.filemgr is installed
+	 */
+	checkForFileMgr: function() {
+		this.log("Checking for filemgr service...");
+		if (window.PalmSystem && this.$.listAppsService) {
+			this.$.listAppsService.call({});
+		} else {
+			// Not on device, use built-in picker
+			this.fileMgrAvailable = false;
+			this.$.filePicker.pickFile();
+		}
+	},
+
+	/**
+	 * Handle response from listApps service
+	 */
+	handleListAppsResponse: function(inSender, inResponse) {
+		this.log("listApps response received");
+		var found = false;
+
+		if (inResponse && inResponse.apps) {
+			for (var i = 0; i < inResponse.apps.length; i++) {
+				if (inResponse.apps[i].id === "ca.canucksoftware.filemgr") {
+					found = true;
+					break;
+				}
+			}
+		}
+
+		this.fileMgrAvailable = found;
+		this.log("filemgr available: " + found);
+
+		if (found) {
+			this.showFileMgrPicker();
+		} else {
+			this.showFilePickerWithRescan();
+		}
+	},
+
+	/**
+	 * Trigger media rescan and show built-in FilePicker
+	 */
+	showFilePickerWithRescan: function() {
+		var self = this;
+		this.log("Triggering media rescan before showing FilePicker...");
+
+		// Trigger rescan of media database to pick up new files
+		if (this.$.mediaRescanService) {
+			try {
+				this.$.mediaRescanService.call({
+					query: {from: "com.palm.media.types:1"}
+				});
+			} catch (e) {
+				this.log("Media rescan error: " + e);
+			}
+		}
+
+		// Give the indexer a moment to process, then show picker
+		setTimeout(function() {
+			self.$.filePicker.pickFile();
+		}, 500);
+	},
+
+	/**
+	 * Use filemgr service to scan for ePub files
+	 */
+	showFileMgrPicker: function() {
+		this.log("Using filemgr to scan for ePubs...");
+		this.epubFilesFound = [];
+		this.epubFilesSelected = {};
+		this.directoriesScanned = 0;
+		this.directoriesToScan = [
+			"/media/internal",
+			"/media/internal/ebooks",
+			"/media/internal/books",
+			"/media/internal/Documents",
+			"/media/internal/downloads"
+		];
+
+		// Show spinner while scanning
+		this.showSpinnerPopup("Scanning for ePub files...");
+
+		// Start scanning directories
+		this.scanNextDirectory();
+	},
+
+	/**
+	 * Scan the next directory in the queue
+	 */
+	scanNextDirectory: function() {
+		if (this.directoriesScanned >= this.directoriesToScan.length) {
+			// Done scanning, show picker
+			this.hideSpinnerPopup();
+			this.showEpubPickerPopup();
+			return;
+		}
+
+		var path = this.directoriesToScan[this.directoriesScanned];
+		this.log("Scanning directory: " + path);
+
+		if (this.$.fileMgrService) {
+			this.$.fileMgrService.call({
+				path: path,
+				sort: "name",
+				ascending: true
+			});
+		} else {
+			// Service not available, skip to next
+			this.directoriesScanned++;
+			this.scanNextDirectory();
+		}
+	},
+
+	/**
+	 * Handle response from filemgr listFiles service
+	 */
+	handleFileMgrResponse: function(inSender, inResponse) {
+		// Check for successful response with items
+		if (inResponse && inResponse.returnValue !== false && inResponse.items) {
+			for (var i = 0; i < inResponse.items.length; i++) {
+				var item = inResponse.items[i];
+				// Skip hidden files (starting with ".")
+				if (item.name && item.name.charAt(0) === ".") {
+					continue;
+				}
+				// Check if it's an epub file (by type or name)
+				if (item.type === "epub" || (item.name && item.name.toLowerCase().indexOf(".epub") !== -1)) {
+					// Check for duplicates (by path)
+					var isDuplicate = false;
+					for (var j = 0; j < this.epubFilesFound.length; j++) {
+						if (this.epubFilesFound[j].path === item.path) {
+							isDuplicate = true;
+							break;
+						}
+					}
+					if (!isDuplicate) {
+						this.epubFilesFound.push({
+							name: item.name,
+							path: item.path,
+							size: item.size || this.formatFileSize(item.bytes)
+						});
+					}
+				}
+			}
+		} else if (inResponse && inResponse.returnValue === false) {
+			// Directory doesn't exist or error - just log and continue
+			this.log("Directory scan failed: " + (inResponse.errorText || "directory not found"));
+		}
+
+		// Continue to next directory
+		this.directoriesScanned++;
+		this.scanNextDirectory();
+	},
+
+	/**
+	 * Format file size in human readable form
+	 */
+	formatFileSize: function(bytes) {
+		if (!bytes) return "";
+		if (bytes < 1024) return bytes + " B";
+		if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+		return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+	},
+
+	/**
+	 * Show the custom epub picker popup
+	 */
+	showEpubPickerPopup: function() {
+		this.log("Found " + this.epubFilesFound.length + " ePub files");
+
+		if (this.epubFilesFound.length === 0) {
+			this.$.epubPickerEmpty.setShowing(true);
+			this.$.epubPickerScroller.setShowing(false);
+			this.$.importSelectedBtn.setShowing(false);
+		} else {
+			this.$.epubPickerEmpty.setShowing(false);
+			this.$.epubPickerScroller.setShowing(true);
+			this.$.importSelectedBtn.setShowing(true);
+			this.$.epubFileRepeater.render();
+		}
+
+		this.updateImportButtonState();
+		this.$.epubPickerPopup.openAtCenter();
+	},
+
+	/**
+	 * Setup row for epub file repeater
+	 */
+	setupEpubFileRow: function(inSender, inIndex) {
+		if (inIndex < this.epubFilesFound.length) {
+			var file = this.epubFilesFound[inIndex];
+			this.$.epubFileName.setContent(file.name);
+			// Show directory path (remove filename and /media/internal prefix for brevity)
+			var dirPath = file.path.replace(/\/[^\/]+$/, "").replace("/media/internal", "");
+			this.$.epubFilePath.setContent(dirPath || "/");
+			this.$.epubFileSize.setContent(file.size);
+			this.$.epubFileCheckbox.setChecked(!!this.epubFilesSelected[file.path]);
+			return true;
+		}
+		return false;
+	},
+
+	/**
+	 * Toggle selection when row is tapped
+	 */
+	toggleEpubFileSelection: function(inSender, inEvent) {
+		var index = inEvent.rowIndex;
+		if (index !== undefined && index < this.epubFilesFound.length) {
+			var file = this.epubFilesFound[index];
+			if (this.epubFilesSelected[file.path]) {
+				delete this.epubFilesSelected[file.path];
+			} else {
+				this.epubFilesSelected[file.path] = true;
+			}
+			this.$.epubFileRepeater.renderRow(index);
+			this.updateImportButtonState();
+		}
+	},
+
+	/**
+	 * Handle checkbox click (prevent double-toggle)
+	 */
+	epubCheckboxClicked: function(inSender, inEvent) {
+		// Stop propagation to prevent toggleEpubFileSelection from also firing
+		inEvent.stopPropagation();
+		this.toggleEpubFileSelection(inSender, inEvent);
+	},
+
+	/**
+	 * Update the import button enabled state
+	 */
+	updateImportButtonState: function() {
+		var count = Object.keys(this.epubFilesSelected).length;
+		this.$.importSelectedBtn.setDisabled(count === 0);
+		if (count > 0) {
+			this.$.importSelectedBtn.setContent("Import " + count + " Selected");
+		} else {
+			this.$.importSelectedBtn.setContent("Import Selected");
+		}
+	},
+
+	/**
+	 * Cancel the epub picker
+	 */
+	cancelEpubPicker: function() {
+		this.$.epubPickerPopup.close();
+	},
+
+	/**
+	 * Import selected epub files
+	 */
+	importSelectedEpubs: function() {
+		var filePaths = Object.keys(this.epubFilesSelected);
+		this.$.epubPickerPopup.close();
+
+		if (filePaths.length > 0) {
+			this.importMultipleEpubs(filePaths);
+		}
 	},
 
 	handleFilePicked: function(inSender, inResponse) {
@@ -597,18 +920,16 @@ enyo.kind({
 		var errors = [];
 
 		// Show spinner with progress
-		this.$.spinnerPopup.openAtCenter();
+		this.showSpinnerPopup("Importing 1 of " + total + "...");
 
 		function updateProgress() {
-			if (self.$.spinnerText) {
-				self.$.spinnerText.setContent("Importing " + (current + 1) + " of " + total + "...");
-			}
+			self.showSpinnerPopup("Importing " + (current + 1) + " of " + total + "...");
 		}
 
 		function importNext() {
 			if (current >= total) {
 				// All done
-				self.$.spinnerPopup.close();
+				self.hideSpinnerPopup();
 
 				// Refresh library view
 				if (self.$.navigator) {

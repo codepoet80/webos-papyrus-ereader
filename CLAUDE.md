@@ -16,6 +16,7 @@ The app is fully functional and ready for community testing.
 
 ### Working Features
 - Library grid/list view with book covers
+- Smart file import: auto-detects filemgr service for reliable file scanning
 - Multi-select file picker for batch ePub imports
 - Import progress indicator ("Importing 1 of 5...")
 - Loading spinner when opening books
@@ -154,18 +155,37 @@ Settings are stored in `localStorage` under key `ereader_settings`:
 
 Books are stored in `localStorage` under key `ereader_library` as a JSON array of BookData objects. Book content is stored in WebSQL databases (one per book).
 
-### File Import / FilePicker
+### File Import / FileMgr Integration
 
-The webOS FilePicker is a system component that shows all indexed documents - it does not support folder or extension filtering.
+The built-in webOS FilePicker only shows **indexed** files, which often misses newly-copied ePubs. To solve this:
 
-Our workaround:
+**Automatic FileMgr Detection:**
+1. On "Import ePub", app checks if `ca.canucksoftware.filemgr` is installed
+2. If available, uses filemgr's `listFiles` service to scan directories directly (bypasses indexer)
+3. If not available, triggers a media rescan (`com.palm.db/find`) and falls back to FilePicker
+
+**FileMgr Integration** (if installed):
+- Scans: `/media/internal`, `/media/internal/ebooks`, `/media/internal/books`, `/media/internal/Documents`, `/media/internal/downloads`
+- Shows custom picker popup with all found `.epub` files
+- Multi-select support with checkboxes
+- Displays file sizes
+
+**FilePicker Fallback** (if filemgr not installed):
+- Triggers media rescan before showing picker
 - FilePicker shows all documents (`fileType: ["document"]`)
-- After selection, `handleFilePicked()` filters to only accept `.epub` files
+- After selection, filters to only `.epub` files
 - Non-epub selections show error: "Please select ePub files only"
 
+**Service calls used:**
 ```javascript
-// Response format from FilePicker
-[{fullPath: "/media/internal/ebooks/book.epub", size: 12345, ...}, ...]
+// Check for filemgr
+palm://com.palm.applicationManager/listApps
+
+// Scan directories (filemgr)
+palm://ca.canucksoftware.filemgr/listFiles {path: "/media/internal/ebooks", sort: "name"}
+
+// Trigger media rescan (fallback)
+palm://com.palm.db/find {query: {from: "com.palm.media.types:1"}}
 ```
 
 Import supports multi-select - users can choose multiple ePubs and import them all at once with progress tracking.
@@ -207,8 +227,8 @@ Uses fixed 0-10000 scale for `locationsTotal` instead of raw byte length.
 ### 4. Enyo Popup Lazy Loading
 Popups that need immediate access must have `lazy: false` to be available before first open.
 
-### 5. FilePicker Epub Filtering
-FilePicker doesn't support extension filtering, so we filter results in `handleFilePicked()`.
+### 5. FileMgr Integration for File Import
+Built-in FilePicker misses non-indexed files. App now auto-detects `ca.canucksoftware.filemgr` and uses it to scan directories directly. Falls back to FilePicker with media rescan trigger if filemgr is not installed.
 
 ### 6. Dogear Button Z-Index
 Dogear button needs `z-index: 110` to be clickable above the toolbar (`z-index: 105`).
@@ -239,7 +259,7 @@ Remove Enyo's default `border-image` and set explicit `background-color` for pro
 - [x] Loading spinner for book opening
 - [x] About dialog
 - [x] Dogear bookmark button
-- [x] FilePicker epub filtering
+- [x] FileMgr integration for reliable file import
 
 ### Not Yet Implemented
 - [ ] Location slider navigation

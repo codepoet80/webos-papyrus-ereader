@@ -30,10 +30,15 @@ FileImporter.prototype.importEpub = function(filePath, callback) {
 		return;
 	}
 
-	// Convert path to file:// URL if needed
+	// Convert path to file:// URL if needed, encoding spaces and special characters
 	var fileUrl = filePath;
 	if (fileUrl.indexOf("file://") !== 0 && fileUrl.indexOf("http") !== 0) {
-		fileUrl = "file://" + filePath;
+		// Encode the path portion for URLs with spaces/special chars
+		fileUrl = "file://" + encodeURI(filePath);
+	} else if (fileUrl.indexOf("file://") === 0) {
+		// Already has file:// prefix, but path might need encoding
+		var pathPart = filePath.substring(7); // Remove "file://"
+		fileUrl = "file://" + encodeURI(pathPart);
 	}
 
 	console.log("Loading file URL: " + fileUrl);

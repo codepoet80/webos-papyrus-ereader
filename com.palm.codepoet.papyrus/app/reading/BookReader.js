@@ -27,7 +27,7 @@ enyo.kind({
 		{name: "dimCover", className: "dimCover", onclick: "handleDismissSlideout", showing: false},
 		{name: "loadingPopup", kind: "Popup", className: "spinner-popup", lazy: false, scrim: true, modal: true, components: [
 			{kind: "VFlexBox", align: "center", components: [
-				{kind: "SpinnerLarge"},
+				{kind: "Spinner", showing: true},
 				{content: "Loading book...", style: "color: white; margin-top: 10px;"}
 			]}
 		]}
