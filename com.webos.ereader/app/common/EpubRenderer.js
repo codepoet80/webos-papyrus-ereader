@@ -316,9 +316,45 @@ enyo.kind({
 	},
 
 	/**
+	 * Check if basic reading mode is enabled (disables animations)
+	 */
+	isBasicReadingMode: function() {
+		try {
+			var settings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
+			return settings.basicReadingMode === true;
+		} catch (e) {
+			return false;
+		}
+	},
+
+	/**
+	 * Check if page content is effectively blank
+	 * Returns true if page contains only whitespace, empty tags, or non-visible content
+	 */
+	isBlankPage: function(html) {
+		if (!html) return true;
+
+		// Strip all HTML tags
+		var textContent = html.replace(/<[^>]*>/g, '');
+
+		// Strip whitespace and common invisible characters
+		textContent = textContent.replace(/[\s\u00A0\u200B\u200C\u200D\uFEFF]/g, '');
+
+		// If nothing left, it's blank
+		return textContent.length === 0;
+	},
+
+	/**
 	 * Navigate to next page
 	 */
 	nextPage: function() {
+		this.nextPageInternal(0);
+	},
+
+	/**
+	 * Internal next page with blank page skip counter
+	 */
+	nextPageInternal: function(blankSkipCount) {
 		console.log("EpubRenderer.nextPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no"));
 		if (!this.bookReady || this.isAnimating) {
 			console.log("EpubRenderer.nextPage: ABORTED - book not ready or animating");
@@ -328,9 +364,12 @@ enyo.kind({
 		var screenHeight = this.getScreenHeight();
 		console.log("EpubRenderer.nextPage: screenHeight=" + screenHeight + ", calling pageFitter.getNextPage");
 		var self = this;
+		var useAnimation = !this.isBasicReadingMode();
 
-		// Start slide animation
-		this.startSlideAnimation("next");
+		// Only start animation on first call (not during blank page skips)
+		if (blankSkipCount === 0 && useAnimation) {
+			this.startSlideAnimation("next");
+		}
 
 		this.pageFitter.getNextPage(screenHeight, function(html) {
 			console.log("EpubRenderer.nextPage callback: html=" + (html === null ? "null" : "length " + html.length));
@@ -341,7 +380,19 @@ enyo.kind({
 				self.doEndOfBook("false");
 				return;
 			}
-			self.displayPageWithAnimation(html);
+
+			// Check if page is blank and skip if so (max 5 consecutive blank pages)
+			if (self.isBlankPage(html) && blankSkipCount < 5) {
+				console.log("EpubRenderer.nextPage: Skipping blank page (" + (blankSkipCount + 1) + ")");
+				self.nextPageInternal(blankSkipCount + 1);
+				return;
+			}
+
+			if (useAnimation) {
+				self.displayPageWithAnimation(html);
+			} else {
+				self.displayPage(html);
+			}
 		});
 	},
 
@@ -358,9 +409,12 @@ enyo.kind({
 		var screenHeight = this.getScreenHeight();
 		console.log("EpubRenderer.previousPage: screenHeight=" + screenHeight + ", calling pageFitter.getPrevPage");
 		var self = this;
+		var useAnimation = !this.isBasicReadingMode();
 
-		// Start slide animation
-		this.startSlideAnimation("prev");
+		// Start slide animation (if enabled)
+		if (useAnimation) {
+			this.startSlideAnimation("prev");
+		}
 
 		this.pageFitter.getPrevPage(screenHeight, function(html) {
 			console.log("EpubRenderer.previousPage callback: html=" + (html === null ? "null" : "length " + html.length));
@@ -371,7 +425,11 @@ enyo.kind({
 				self.doEndOfBook("true");
 				return;
 			}
-			self.displayPageWithAnimation(html);
+			if (useAnimation) {
+				self.displayPageWithAnimation(html);
+			} else {
+				self.displayPage(html);
+			}
 		});
 	},
 
@@ -379,6 +437,13 @@ enyo.kind({
 	 * Refresh/redraw the current page
 	 */
 	refreshPage: function() {
+		this.refreshPageInternal(0);
+	},
+
+	/**
+	 * Internal refresh with blank page skip counter
+	 */
+	refreshPageInternal: function(blankSkipCount) {
 		console.log("EpubRenderer.refreshPage: bookReady=" + this.bookReady);
 		if (!this.bookReady) {
 			console.log("EpubRenderer.refreshPage: ABORTED - book not ready");
@@ -396,6 +461,21 @@ enyo.kind({
 				self.doKrfPluginError("Failed to render page");
 				return;
 			}
+
+			// If current page is blank and we haven't skipped too many, move forward
+			if (self.isBlankPage(html) && blankSkipCount < 5) {
+				console.log("EpubRenderer.refreshPage: Current page is blank, skipping forward (" + (blankSkipCount + 1) + ")");
+				self.pageFitter.getNextPage(screenHeight, function(nextHtml) {
+					if (nextHtml === null) {
+						// End of book, just show the blank page
+						self.displayPage(html);
+					} else {
+						self.refreshPageInternal(blankSkipCount + 1);
+					}
+				});
+				return;
+			}
+
 			self.displayPage(html);
 		});
 	},
@@ -803,7 +883,7 @@ enyo.kind({
 	 */
 	displayPageWithAnimation: function(html) {
 		var self = this;
-		// Wait for fade-out (150ms), then update content and fade in
+		// Wait for fade-out (80ms), then update content and fade in
 		setTimeout(function() {
 			self.displayPage(html);
 			var container = self.$.pageContainer.hasNode();
@@ -813,8 +893,8 @@ enyo.kind({
 			// Clear animation flag after fade-in
 			setTimeout(function() {
 				self.isAnimating = false;
-			}, 160);
-		}, 160);
+			}, 90);
+		}, 90);
 	},
 
 	/**

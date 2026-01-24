@@ -31,6 +31,7 @@ enyo.kind({
 			]},
 			{kind: "Button", name: "openBtn", content: $L("Open Book"), onclick: "handleBookSelected"},
 			{kind: "Button", name: "deleteBtn", content: $L("Delete Book"), onclick: "handleDeleteBook", className: "enyo-button-negative"},
+			{kind: "Button", name: "doneBtn", content: $L("Done"), onclick: "close", className: "enyo-button-dark", style: "margin-top: 10px;"},
 		]},
 	],
 

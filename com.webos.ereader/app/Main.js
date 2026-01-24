@@ -397,8 +397,17 @@ enyo.kind({
 	},
 
 	updateSetting: function(key, value) {
-		this.configData[key] = value;
-		this.saveSettings();
+		// Read fresh settings from localStorage to avoid overwriting changes
+		// made by Settings popup while this.configData was cached
+		try {
+			var freshSettings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
+			freshSettings[key] = value;
+			this.configData = freshSettings;
+			localStorage.setItem("ereader_settings", JSON.stringify(freshSettings));
+		} catch (e) {
+			this.configData[key] = value;
+			this.saveSettings();
+		}
 	},
 
 	// ========================================

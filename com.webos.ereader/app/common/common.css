@@ -25,7 +25,7 @@
 	box-sizing: border-box;
 	/* Simple fade animation for page turns */
 	opacity: 1;
-	-webkit-transition: opacity 0.15s ease-out;
+	-webkit-transition: opacity 0.08s ease-out;
 }
 
 /* Page fading out during turn */
