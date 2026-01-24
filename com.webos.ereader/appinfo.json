@@ -1,12 +1,12 @@
 {
-	"id": "com.webos.ereader",
+	"id": "com.palm.webos.ereader",
 	"version": "1.0.0",
-	"vendor": "Open Source",
+	"vendor": "codepoet80",
 	"type": "web",
 	"main": "index.html",
-	"title": "E-Reader",
+	"title": "Papyrus eReader",
 	"icon": "icon.png",
-	"splashicon": "icon-256x256.png",
+	"splashicon": "icon-256.png",
 	"uiRevision": 2,
 	"mimeTypes": [{"extension": "epub", "mime": "application/epub+zip"}]
 }

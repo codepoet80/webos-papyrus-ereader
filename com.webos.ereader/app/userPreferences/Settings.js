@@ -10,54 +10,55 @@ enyo.kind({
 	lazy: false,
 	className: "settingsBox",
 	width: "400px",
-	height: "400px",
-	style: "padding: 20px;",
+	style: "padding: 20px; height: 450px;",
 	components: [
-		{kind: "VFlexBox", flex: 1, components: [
+		{kind: "VFlexBox", style: "height: 100%;", components: [
 			{content: $L("Settings"), className: "loginFormTitle"},
-			{kind: "RowGroup", components: [
-				{kind: "HFlexBox", components: [
-					{content: $L("Basic reading mode"), flex: 1},
-					{kind: "ToggleButton", name: "animBtn", state: false, onChange: "saveAnimationChange"},
+			{kind: "Scroller", style: "height: 340px;", components: [
+				{kind: "VFlexBox", components: [
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{content: $L("Basic reading mode"), flex: 1},
+							{kind: "ToggleButton", name: "animBtn", state: false, onChange: "saveAnimationChange"},
+						]},
+						{content: $L("Simplified page turning and other animations"), className: "loginFormDescription"},
+					]},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{content: $L("Default theme"), flex: 1},
+							{kind: "ListSelector", name: "themeSelector", onChange: "saveThemeChange", items: [
+								{caption: $L("White"), value: 0},
+								{caption: $L("Sepia"), value: 1},
+								{caption: $L("Black"), value: 2}
+							]}
+						]},
+					]},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{content: $L("Default font"), flex: 1},
+							{kind: "ListSelector", name: "fontSelector", onChange: "saveFontChange", items: [
+								{caption: $L("Georgia"), value: 0},
+								{caption: $L("Verdana"), value: 1}
+							]}
+						]},
+					]},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{content: $L("Default font size"), flex: 1},
+							{kind: "ListSelector", name: "fontSizeSelector", onChange: "saveFontSizeChange", items: [
+								{caption: $L("Small (14)"), value: 14},
+								{caption: $L("Medium (18)"), value: 18},
+								{caption: $L("Large (22)"), value: 22},
+								{caption: $L("Extra Large (26)"), value: 26}
+							]}
+						]},
+					]},
+					{kind: "RowGroup", style: "margin-top: 20px;", components: [
+						{kind: "Button", content: $L("Clear Library"), className: "enyo-button-negative", onclick: "confirmClearLibrary"},
+					]},
 				]},
-				{content: $L("Simplified page turning and other animations"), className: "loginFormDescription"},
 			]},
-			{kind: "RowGroup", components: [
-				{kind: "HFlexBox", components: [
-					{content: $L("Default theme"), flex: 1},
-					{kind: "ListSelector", name: "themeSelector", onChange: "saveThemeChange", items: [
-						{caption: $L("White"), value: 0},
-						{caption: $L("Sepia"), value: 1},
-						{caption: $L("Black"), value: 2}
-					]}
-				]},
-			]},
-			{kind: "RowGroup", components: [
-				{kind: "HFlexBox", components: [
-					{content: $L("Default font"), flex: 1},
-					{kind: "ListSelector", name: "fontSelector", onChange: "saveFontChange", items: [
-						{caption: $L("Georgia"), value: 0},
-						{caption: $L("Verdana"), value: 1}
-					]}
-				]},
-			]},
-			{kind: "RowGroup", components: [
-				{kind: "HFlexBox", components: [
-					{content: $L("Default font size"), flex: 1},
-					{kind: "ListSelector", name: "fontSizeSelector", onChange: "saveFontSizeChange", items: [
-						{caption: $L("Small (14)"), value: 14},
-						{caption: $L("Medium (18)"), value: 18},
-						{caption: $L("Large (22)"), value: 22},
-						{caption: $L("Extra Large (26)"), value: 26}
-					]}
-				]},
-			]},
-			{kind: "Spacer", flex: 1},
-			{kind: "RowGroup", style: "margin-top: 20px;", components: [
-				{kind: "Button", content: $L("Clear Library"), className: "enyo-button-dark", onclick: "confirmClearLibrary"},
-			]},
-			{kind: "Spacer"},
-			{kind: "HFlexBox", components: [
+			{kind: "HFlexBox", style: "margin-top: 10px;", components: [
 				{kind: "Button", flex: 1, content: $L("OK"), className: "enyo-button-dark", onclick: "close"}
 			]},
 		]},
@@ -128,13 +129,14 @@ enyo.kind({
 
 	clearLibrary: function() {
 		this.$.confirmPopup.close();
+		this.close();  // Close settings popup
 		try {
 			localStorage.removeItem("ereader_library");
 			localStorage.removeItem("ereader_annotations");
 			localStorage.removeItem("ereader_categories");
-			// Notify the app to refresh
-			if (this.owner && this.owner.refreshLibrary) {
-				this.owner.refreshLibrary();
+			// Notify the app to refresh and rescan for books
+			if (window.EReaderApp && window.EReaderApp.refreshLibrary) {
+				window.EReaderApp.refreshLibrary();
 			}
 		} catch (e) {
 			this.log("Error clearing library: " + e);

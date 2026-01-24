@@ -134,6 +134,11 @@
 
 .coverImageLarge {
 	margin: -8px 0 -5px 0;
+	width: 120px;
+	height: 180px;
+	max-width: 120px;
+	max-height: 180px;
+	object-fit: cover;
 }
 
 .coverBoxLarge {

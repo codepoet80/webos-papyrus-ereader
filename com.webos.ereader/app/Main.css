@@ -3,8 +3,12 @@
 }
 
 .spinner-popup {
-	min-width: 0;
+	min-width: 200px;
+	padding: 20px 30px;
+	background: rgba(0, 0, 0, 0.8);
+	border-radius: 10px;
 	-webkit-border-image: none;
+	text-align: center;
 }
 
 .aboutTitle {

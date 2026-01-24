@@ -61,13 +61,16 @@ enyo.kind({
 			{kind: "Button", content: $L("OK"), className: "enyo-button-dark", onclick: "dismissErr"}
 		]},
 
-		// Spinner popup for loading
-		{name: "spinnerPopup", kind: "Popup", className: "spinner-popup", dismissWithClick: false, modal: true, scrim: true, components: [
-			{kind: "SpinnerLarge"},
+		// Spinner popup for loading with progress text
+		{name: "spinnerPopup", kind: "Popup", className: "spinner-popup", lazy: false, dismissWithClick: false, modal: true, scrim: true, components: [
+			{kind: "VFlexBox", align: "center", components: [
+				{kind: "SpinnerLarge"},
+				{name: "spinnerText", content: "Loading...", style: "color: white; margin-top: 10px; font-size: 16px;"}
+			]}
 		]},
 
-		// File picker for importing ePubs
-		{kind: "FilePicker", name: "filePicker", fileType: ["document"], onPickFile: "handleFilePicked"},
+		// File picker for importing ePubs (multi-select enabled)
+		{kind: "FilePicker", name: "filePicker", fileType: ["document"], allowMultiSelect: true, onPickFile: "handleFilePicked"},
 
 		// Palm services
 		{name: "openBrowser", kind: enyo.PalmService, service: "palm://com.palm.applicationManager/", method: "launch"},
@@ -153,8 +156,7 @@ enyo.kind({
 		if (this.$.navigator) {
 			this.$.navigator.rebuildView();
 		}
-		// Auto-scan for new ePub files
-		this.scanForNewBooks();
+		// No auto-import - user must use "Import ePub" button
 	},
 
 	scanForNewBooks: function() {
@@ -271,23 +273,60 @@ enyo.kind({
 	importMultipleBooks: function(filePaths) {
 		var self = this;
 		var index = 0;
+		var total = filePaths.length;
+		var importer = new FileImporter();
+
+		// Show progress spinner immediately
+		self.showImportProgress(1, total);
 
 		var importNext = function() {
-			if (index >= filePaths.length) {
-				// All done, refresh view
+			if (index >= total) {
+				// All done, hide spinner and refresh view
+				self.hideImportProgress();
 				if (self.$.navigator) {
 					self.$.navigator.rebuildView();
 				}
 				return;
 			}
 
-			self.importEpubFile(filePaths[index]);
-			index++;
-			// Small delay between imports
-			setTimeout(importNext, 500);
+			// Update progress text
+			self.showImportProgress(index + 1, total);
+
+			// Import directly using FileImporter (bypass importEpubFile to avoid spinner conflict)
+			importer.importEpub(filePaths[index], function(book, error) {
+				if (error) {
+					self.log("Import error for " + filePaths[index] + ": " + error);
+				} else if (book) {
+					self.log("Successfully imported: " + book.title);
+				}
+				index++;
+				// Small delay between imports to let UI update
+				setTimeout(importNext, 100);
+			});
 		};
 
 		importNext();
+	},
+
+	showImportProgress: function(current, total) {
+		var text = "Importing books...";
+		if (total > 0) {
+			text = "Importing book " + current + " of " + total + "...";
+		}
+		this.log("showImportProgress: " + text);
+		if (this.$.spinnerText) {
+			this.$.spinnerText.setContent(text);
+		}
+		if (this.$.spinnerPopup) {
+			this.$.spinnerPopup.openAtCenter();
+		}
+	},
+
+	hideImportProgress: function() {
+		this.log("hideImportProgress");
+		if (this.$.spinnerPopup) {
+			this.$.spinnerPopup.close();
+		}
 	},
 
 	// ========================================
@@ -458,16 +497,15 @@ enyo.kind({
 	},
 
 	/**
-	 * Refresh library after clearing - rescans and reimports books
+	 * Refresh library view (after clearing or changes)
 	 */
 	refreshLibrary: function() {
 		this.log("Refreshing library...");
-		// Rebuild the view (will show empty)
+		// Rebuild the view
 		if (this.$.navigator) {
 			this.$.navigator.rebuildView();
 		}
-		// Rescan for books to import
-		this.scanForNewBooks();
+		// No auto-import - user must use "Import ePub" button
 	},
 
 	// ========================================
@@ -479,44 +517,115 @@ enyo.kind({
 	},
 
 	handleFilePicked: function(inSender, inResponse) {
-		if (inResponse && inResponse.fullPath) {
-			this.importEpubFile(inResponse.fullPath);
+		this.log("FilePicker response: " + JSON.stringify(inResponse));
+
+		// Collect all file paths from the response
+		var filePaths = [];
+		if (inResponse) {
+			// FilePicker returns an array of selected files
+			if (Array.isArray(inResponse) && inResponse.length > 0) {
+				for (var i = 0; i < inResponse.length; i++) {
+					var path = inResponse[i].fullPath || inResponse[i].path;
+					if (path) {
+						filePaths.push(path);
+					}
+				}
+			} else if (inResponse.fullPath) {
+				filePaths.push(inResponse.fullPath);
+			} else if (inResponse.path) {
+				filePaths.push(inResponse.path);
+			} else if (typeof inResponse === "string") {
+				filePaths.push(inResponse);
+			} else if (inResponse.result && inResponse.result.fullPath) {
+				filePaths.push(inResponse.result.fullPath);
+			}
+		}
+
+		if (filePaths.length > 0) {
+			this.log("Importing " + filePaths.length + " file(s)");
+			this.importMultipleEpubs(filePaths);
+		} else {
+			this.log("No file paths in response");
 		}
 	},
 
 	handleImportBook: function(inSender, filePath) {
-		this.importEpubFile(filePath);
+		// If no file path provided, open the file picker
+		if (!filePath) {
+			this.showFilePicker();
+		} else {
+			this.importMultipleEpubs([filePath]);
+		}
 	},
 
-	importEpubFile: function(filePath) {
-		this.log("Importing ePub: " + filePath);
-
-		// Show spinner
-		this.$.spinnerPopup.openAtCenter();
+	importMultipleEpubs: function(filePaths) {
+		if (!filePaths || filePaths.length === 0) {
+			return;
+		}
 
 		var self = this;
+		var total = filePaths.length;
+		var current = 0;
+		var successCount = 0;
+		var errors = [];
 
-		// Use FileImporter to import the ePub
-		// FileImporter handles storage to localStorage
-		var importer = new FileImporter();
-		importer.importEpub(filePath, function(book, error) {
-			self.$.spinnerPopup.close();
+		// Show spinner with progress
+		this.$.spinnerPopup.openAtCenter();
 
-			if (error) {
-				self.log("Import error: " + error);
-				self.showError("Import Failed", error);
-				return;
+		function updateProgress() {
+			if (self.$.spinnerText) {
+				self.$.spinnerText.setContent("Importing " + (current + 1) + " of " + total + "...");
 			}
+		}
 
-			if (book) {
-				// Refresh library view (FileImporter already saved to localStorage)
+		function importNext() {
+			if (current >= total) {
+				// All done
+				self.$.spinnerPopup.close();
+
+				// Refresh library view
 				if (self.$.navigator) {
 					self.$.navigator.rebuildView();
 				}
 
-				self.log("Successfully imported: " + book.title);
+				// Show summary if there were errors
+				if (errors.length > 0) {
+					self.showError("Import Complete",
+						successCount + " book(s) imported successfully.\n" +
+						errors.length + " failed.");
+				} else {
+					self.log("Successfully imported " + successCount + " book(s)");
+				}
+				return;
 			}
-		});
+
+			updateProgress();
+
+			var filePath = filePaths[current];
+			self.log("Importing: " + filePath);
+
+			var importer = new FileImporter();
+			importer.importEpub(filePath, function(book, error) {
+				if (error) {
+					self.log("Import error for " + filePath + ": " + error);
+					errors.push(filePath + ": " + error);
+				} else if (book) {
+					successCount++;
+					self.log("Imported: " + book.title);
+				}
+
+				current++;
+				// Small delay between imports to let UI update
+				setTimeout(importNext, 100);
+			});
+		}
+
+		importNext();
+	},
+
+	// Single file import (convenience wrapper)
+	importEpubFile: function(filePath) {
+		this.importMultipleEpubs([filePath]);
 	},
 
 	// ========================================

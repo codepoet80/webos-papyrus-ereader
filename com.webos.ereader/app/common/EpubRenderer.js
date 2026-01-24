@@ -46,6 +46,8 @@ enyo.kind({
 	bookReady: false,
 	tocAvailable: false,
 	navigationHistory: [],
+	isAnimating: false,
+	animationDirection: "next",
 
 	// Components
 	components: [
@@ -318,8 +320,8 @@ enyo.kind({
 	 */
 	nextPage: function() {
 		console.log("EpubRenderer.nextPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no"));
-		if (!this.bookReady) {
-			console.log("EpubRenderer.nextPage: ABORTED - book not ready");
+		if (!this.bookReady || this.isAnimating) {
+			console.log("EpubRenderer.nextPage: ABORTED - book not ready or animating");
 			return;
 		}
 
@@ -327,15 +329,19 @@ enyo.kind({
 		console.log("EpubRenderer.nextPage: screenHeight=" + screenHeight + ", calling pageFitter.getNextPage");
 		var self = this;
 
+		// Start slide animation
+		this.startSlideAnimation("next");
+
 		this.pageFitter.getNextPage(screenHeight, function(html) {
 			console.log("EpubRenderer.nextPage callback: html=" + (html === null ? "null" : "length " + html.length));
 			if (html === null) {
-				// End of book
+				// End of book - reset animation
+				self.resetAnimation();
 				console.log("EpubRenderer.nextPage: END OF BOOK reached");
 				self.doEndOfBook("false");
 				return;
 			}
-			self.displayPage(html);
+			self.displayPageWithAnimation(html);
 		});
 	},
 
@@ -344,8 +350,8 @@ enyo.kind({
 	 */
 	previousPage: function() {
 		console.log("EpubRenderer.previousPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no"));
-		if (!this.bookReady) {
-			console.log("EpubRenderer.previousPage: ABORTED - book not ready");
+		if (!this.bookReady || this.isAnimating) {
+			console.log("EpubRenderer.previousPage: ABORTED - book not ready or animating");
 			return;
 		}
 
@@ -353,15 +359,19 @@ enyo.kind({
 		console.log("EpubRenderer.previousPage: screenHeight=" + screenHeight + ", calling pageFitter.getPrevPage");
 		var self = this;
 
+		// Start slide animation
+		this.startSlideAnimation("prev");
+
 		this.pageFitter.getPrevPage(screenHeight, function(html) {
 			console.log("EpubRenderer.previousPage callback: html=" + (html === null ? "null" : "length " + html.length));
 			if (html === null) {
-				// Beginning of book
+				// Beginning of book - reset animation
+				self.resetAnimation();
 				console.log("EpubRenderer.previousPage: BEGINNING OF BOOK reached");
 				self.doEndOfBook("true");
 				return;
 			}
-			self.displayPage(html);
+			self.displayPageWithAnimation(html);
 		});
 	},
 
@@ -765,6 +775,47 @@ enyo.kind({
 	// ========================================
 	// INTERNAL METHODS
 	// ========================================
+
+	/**
+	 * Start fade-out animation for page turn
+	 */
+	startSlideAnimation: function(direction) {
+		this.isAnimating = true;
+		var container = this.$.pageContainer.hasNode();
+		if (container) {
+			container.className = "epub-page-container page-turning";
+		}
+	},
+
+	/**
+	 * Reset animation state
+	 */
+	resetAnimation: function() {
+		this.isAnimating = false;
+		var container = this.$.pageContainer.hasNode();
+		if (container) {
+			container.className = "epub-page-container";
+		}
+	},
+
+	/**
+	 * Display page with fade animation
+	 */
+	displayPageWithAnimation: function(html) {
+		var self = this;
+		// Wait for fade-out (150ms), then update content and fade in
+		setTimeout(function() {
+			self.displayPage(html);
+			var container = self.$.pageContainer.hasNode();
+			if (container) {
+				container.className = "epub-page-container";
+			}
+			// Clear animation flag after fade-in
+			setTimeout(function() {
+				self.isAnimating = false;
+			}, 160);
+		}, 160);
+	},
 
 	/**
 	 * Display rendered HTML content

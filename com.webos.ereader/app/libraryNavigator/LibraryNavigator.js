@@ -29,7 +29,7 @@ enyo.kind({
 		{kind: "HFlexBox", className: "import-button-container", components: [
 			{kind: "Button", name: "importBtn", content: $L("Import ePub"), onclick: "handleImportClick", className: "enyo-button-light import-button", flex: 1}
 		]},
-		{kind: "Popup", name: "addCategoryBar", scrim: true, components: [
+		{kind: "Popup", name: "addCategoryBar", scrim: true, lazy: false, components: [
 			{content: $L("Add new collection:")},
 			{kind: "Input", name: "newCategoryNameBox", style: "margin: 10px 0;", onkeydown: "testEnter"},
 			{kind: "HFlexBox", align: "center", components: [
