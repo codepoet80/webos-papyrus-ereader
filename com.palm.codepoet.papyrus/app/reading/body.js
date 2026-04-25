@@ -719,7 +719,6 @@ enyo.kind({
 	 * Navigate to next page (called from touch/swipe handlers)
 	 */
 	nextPage: function() {
-		console.log("body.nextPage: delegating to epubRenderer");
 		this.$.epubRenderer.nextPage();
 	},
 
@@ -727,7 +726,6 @@ enyo.kind({
 	 * Navigate to previous page (called from touch/swipe handlers)
 	 */
 	previousPage: function() {
-		console.log("body.previousPage: delegating to epubRenderer");
 		this.$.epubRenderer.previousPage();
 	}
 });

@@ -40,7 +40,6 @@ enyo.kind({
 
 	create: function() {
 		this.inherited(arguments);
-		console.log("BookReader: create() - Volume key page turning available (check settings to enable)");
 	},
 
 	// ========================================
@@ -79,21 +78,16 @@ enyo.kind({
 	startVolumeKeyListener: function() {
 		// Check if feature is enabled in settings
 		if (!this.isVolumeKeyPageTurnEnabled()) {
-			console.log("BookReader: Volume key page turning is disabled in settings");
 			return;
 		}
 
-		console.log("BookReader: startVolumeKeyListener() called");
 		if (this.volumeKeysActive) {
-			console.log("BookReader: Volume keys already active, skipping");
 			return;
 		}
 
 		try {
-			console.log("BookReader: Calling volumeKeysService.call()");
 			this.$.volumeKeysService.call({subscribe: true});
 			this.volumeKeysActive = true;
-			console.log("BookReader: Volume key subscription started successfully");
 		} catch (e) {
 			console.error("BookReader: Failed to start volume key listener: " + e);
 		}
@@ -104,17 +98,13 @@ enyo.kind({
 	 * Called when leaving reader view.
 	 */
 	stopVolumeKeyListener: function() {
-		console.log("BookReader: stopVolumeKeyListener() called");
 		if (!this.volumeKeysActive) {
-			console.log("BookReader: Volume keys not active, skipping");
 			return;
 		}
 
 		try {
-			console.log("BookReader: Cancelling volumeKeysService subscription");
 			this.$.volumeKeysService.cancel();
 			this.volumeKeysActive = false;
-			console.log("BookReader: Volume key subscription stopped successfully");
 		} catch (e) {
 			console.error("BookReader: Failed to stop volume key listener: " + e);
 		}
@@ -178,7 +168,6 @@ enyo.kind({
 		this.log("BookReader: handleLibrarySelected called");
 
 		// Stop listening for volume key events
-		console.log("BookReader: handleLibrarySelected - Stopping volume key listener");
 		this.stopVolumeKeyListener();
 
 		// Always restore screen timeout when leaving the reader
@@ -230,7 +219,6 @@ enyo.kind({
 		this.doReaderReady();
 
 		// Start listening for volume key events for page turning
-		console.log("BookReader: handlePluginReady - Starting volume key listener");
 		this.startVolumeKeyListener();
 
 		// Apply the user's screen timeout preference now that reading is active

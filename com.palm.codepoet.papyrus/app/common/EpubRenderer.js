@@ -1074,12 +1074,6 @@ enyo.kind({
 		this.currentStart = this.pageFitter.currStart;
 		this.currentEnd = this.pageFitter.currEnd;
 
-		// Debug: log what we're rendering
-		var htmlLen = html ? html.length : 0;
-		var preview = html ? html.substring(0, 500).replace(/\s+/g, ' ') : "(null)";
-		this.log("displayPage: pos=" + this.currentStart + "-" + this.currentEnd + ", htmlLen=" + htmlLen);
-		this.log("displayPage CONTENT: " + preview);
-
 		// Render the HTML content
 		var container = this.$.pageContainer.hasNode();
 		if (container) {
@@ -1126,12 +1120,10 @@ enyo.kind({
 		var container = this.$.pageContainer.hasNode();
 		if (container && container.offsetHeight > 0) {
 			// Use actual container height
-			this.log("getScreenHeight: using container.offsetHeight = " + container.offsetHeight);
 			return container.offsetHeight;
 		}
 		// Fallback: calculate from window height minus padding and toolbar space
 		var fallback = window.innerHeight - 160;
-		this.log("getScreenHeight: fallback = " + fallback);
 		return fallback;
 	},
 

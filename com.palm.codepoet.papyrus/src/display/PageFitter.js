@@ -19,28 +19,22 @@ PageFitter.prototype.setEncoding = function(encoding) {
 }
 
 PageFitter.prototype.getNextPage = function(size, callback) {
-	console.log("PageFitter.getNextPage: size=" + size + ", currStart=" + this.currStart + ", currEnd=" + this.currEnd + ", bookLen=" + this.getLength());
 	//Checking if we can go to the next page, or must re-render the current page
 	if (this.currStart < 0) {
-		console.log("PageFitter.getNextPage: correcting negative currStart");
 		this.currStart = 0;
 	}
 	if (this.currEnd < 0) {
 		//Invalid end supplied, redrawing current page
-		console.log("PageFitter.getNextPage: correcting negative currEnd to currStart");
 		this.currEnd = this.currStart;
 	}
 	if (this.currEnd >= this.getLength()) {
 		//We return null because there is no next page
-		console.log("PageFitter.getNextPage: AT END OF BOOK - returning null");
 		callback(null);
 		return;
 	}
 
 	//Moving to the next page (may be the same, see above)
 	this.currStart = this.currEnd;
-
-	console.log("PageFitter.getNextPage: calling fitPageForward with start=" + this.currEnd);
 
 	//Getting the next page in forward-mode & returning it through handlePage
 	this.fitPageForward(size, this.currEnd,
@@ -49,7 +43,6 @@ PageFitter.prototype.getNextPage = function(size, callback) {
 }
 
 PageFitter.prototype.getCurrPage = function(size, callback) {
-	console.log("PageFitter.getCurrPage: size=" + size + ", currStart=" + this.currStart + ", currEnd=" + this.currEnd);
 	//Getting a page in forward-mode & returning it through handlePage
 	this.fitPageForward(size, this.currStart,
 		this.handlePage.bind(this, size, callback)
@@ -57,22 +50,17 @@ PageFitter.prototype.getCurrPage = function(size, callback) {
 }
 
 PageFitter.prototype.getPrevPage = function(size, callback) {
-	console.log("PageFitter.getPrevPage: size=" + size + ", currStart=" + this.currStart + ", currEnd=" + this.currEnd);
 	//Checking if we can go to the prev page at all
 	if (this.currStart > this.getLength()) {
-		console.log("PageFitter.getPrevPage: correcting currStart > length");
 		this.currStart = this.getLength();
 	}
 	if (this.currStart <= 0) {
 		//We return null because there is no previous page
-		console.log("PageFitter.getPrevPage: AT BEGINNING OF BOOK - returning null");
 		callback(null);
 		return;
 	}
 	//We can render the previous page
 	this.currEnd = this.currStart;
-
-	console.log("PageFitter.getPrevPage: calling fitPageBackward with end=" + this.currEnd);
 
 	//Getting the prev page in backward-mode & returning it through handlePage
 	this.fitPageBackward(size, this.currEnd,
@@ -152,7 +140,6 @@ PageFitter.prototype.getLength = function() {
 }
 
 PageFitter.prototype.handlePage = function(size, callback, start, len) {
-	console.log("PageFitter.handlePage: start=" + start + ", len=" + len + ", calculated end=" + (start + len));
 	//We set the new page starts & ends
 	this.currStart = start;
 	this.currEnd = start + len;
@@ -165,11 +152,8 @@ PageFitter.prototype.handlePage = function(size, callback, start, len) {
 }
 
 PageFitter.prototype.returnPage = function(callback, buffer) {
-	console.log("PageFitter.returnPage: dropped=" + buffer.dropped + ", textLen=" + (buffer.text ? buffer.text.length : 0));
 	//Reducing our currEnd appropriately
 	this.currEnd -= buffer.dropped;
-
-	console.log("PageFitter.returnPage: final page range " + this.currStart + "-" + this.currEnd + ", invoking callback");
 
 	//And returning the text
 	callback(buffer.text);
@@ -184,12 +168,9 @@ PageFitter.prototype.handleImages = function(size, text, callback){
 		callback(text);
 		return;
 	}
-	console.log("PageFitter: Found image tags in the stream");
-	
 	//The function that inserts the tags into the string
 	var insertTag = function(size, textObj, cntrObj, cntrTarget,
 			callback, origTag, newTag) {
-		console.log("insertTag");
 		//We replace the old tag with the new tag
 		if (newTag == null) newTag = "";
 		textObj.val = textObj.val.replace(origTag, newTag);
@@ -221,7 +202,6 @@ PageFitter.prototype.handleImages = function(size, text, callback){
 }
 
 PageFitter.prototype.handleImage = function(size, callback, data) {
-	console.log("handleImage");
 	// Limit image height to 60% of screen to leave room for text
 	var maxImageHeight = Math.floor(size * 0.6);
 
@@ -326,7 +306,6 @@ PageFitter.prototype.readReplaceAndFit = function(size, start, len, callback) {
 
 
 PageFitter.prototype.fitPageForward = function(size, start, callback, state, buffer) {
-	console.log("PageFitter.fitPageForward: state=" + state + ", start=" + start + ", size=" + size + ", inner=" + this.innerLen + ", outer=" + this.outerLen + ", buffer=" + (buffer ? "present" : "null"));
 
 	//Checking if we need to initialize the variables
 	if (!state) {
@@ -453,7 +432,6 @@ PageFitter.prototype.fitPageForward = function(size, start, callback, state, buf
 }
 
 PageFitter.prototype.fitPageBackward = function(size, end, callback, state, buffer) {
-	console.log("PageFitter.fitPageBackward: state=" + state + ", end=" + end + ", size=" + size + ", inner=" + this.innerLen + ", outer=" + this.outerLen + ", buffer=" + (buffer ? "present" : "null"));
 	//Checking if we need to initialize the variables
 	if (!state) {
 		//TODO: Here we also set the innerLen to 1, due to the same reason as

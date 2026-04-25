@@ -296,12 +296,10 @@ HTMLParser.removeTagAndContent = function(html, tagName, tagPos) {
  * @param {Boolean} sourceIsHTML whether or not to ignore newlines
  */
 HTMLParser.bufferToHTML = function(buf, encoding, sourceIsHTML) {
-	console.log("HTMLParser.bufferToHTML: buf length=" + (buf ? buf.length : 0) + ", encoding=" + encoding);
 	//Translating the bytes according to the given encoding
 	var code = Encoding.decodeBytes(buf, encoding);
 	//Now we need to convert the bytes to a string
 	var text = (sourceIsHTML) ? bytesToString(code.data) : bytes2html(code.data);
-	console.log("HTMLParser.bufferToHTML: result text length=" + (text ? text.length : 0));
 	//And we return the encoded text
 	return {
 		dropped: code.dropped,

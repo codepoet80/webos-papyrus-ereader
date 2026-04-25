@@ -1,7 +1,6 @@
 EpubReader.chunkSize = 4096;
 
 function EpubReader(zipFile, callback, controller) {
-	console.log("EpubReader");
     //Storing the parameters
     this.zip = zipFile;
 	this.zipFileName = zipFile.getBasename();
@@ -64,8 +63,6 @@ EpubReader.prototype = new ByteReader();
 // ~~~ EXTRACTION OF RAW DATA ~~~
 
 EpubReader.prototype.setStreamOK = function() {
-	console.log("setStreamOK");
-	
 	//We calculate the byte offsets of each chapter
 	this.offsets.length = 0;
 	var currOff = 0;
@@ -95,7 +92,6 @@ EpubReader.prototype.setStreamOK = function() {
 }
 
 EpubReader.prototype.setStreamFailure = function() {
-	console.log("setStreamFailure");
 	//We don't need the zip object anymore
 	var lZip = this.zip;
 	this.zip = null;
@@ -119,7 +115,6 @@ EpubReader.prototype.getTextFile = function(name) {
 	} else {
 		file = file.file;
 	}
-	console.log("Uncompressing");
 	//Fetching the data of that file
 	var bytes = file.uncompress();
 	if (bytes == null || bytes.length <= 0) {
@@ -140,7 +135,6 @@ EpubReader.prototype.getTextFile = function(name) {
  * Checks if the file is a valid ePub document
  */
 EpubReader.prototype.checkValidity = function() {
-	console.log("checkValidity");
 	//Trying to read the mimetype file
 	var mimeFile = this.zip.getFile("mimetype");
 	//Checking if the file's there
@@ -328,7 +322,6 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 			var inserted = false;
 			for (var j = 0; j < spineOrder.length; j += 1) {
 				if (spineOrder[j].id == entry.id) {
-					console.log("SpineOrder: " + entry.id + " @ " + spineOrder[j].pos);
 					data.chapters[spineOrder[j].pos] = entry;					
 					inserted = true;
 					break;
@@ -337,10 +330,8 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 			//If the entry wasn't inserted from the spine, we append it
 			if (!inserted) {
 				if (data.chapters.length < spineOrder.length) {
-					console.log("PushOrderA: " + entry.id + " @ " + data.chapters.length);
 					data.chapters.push(entry);
 				} else {
-					console.log("PushOrderB: " + entry.id + " @ " + spineOrder.length);
 					data.chapters[spineOrder.length] = entry;
 				}
 			}
@@ -453,7 +444,6 @@ EpubReader.prototype.displayEncryptionError = function() {
 // ~~~ MARKUP FILTERING METHODS ~~~
 
 EpubReader.prototype.filterMarkup = function() {
-	console.log("filterMarkup");
 	//Creating a synchronizer for the load
 	var synchronizer = new Mojo.Function.Synchronize(
 		{ syncCallback: this.setStreamOK.bind(this) }
