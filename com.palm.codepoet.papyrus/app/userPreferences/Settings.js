@@ -25,6 +25,19 @@ enyo.kind({
 					]},
 					{kind: "RowGroup", components: [
 						{kind: "HFlexBox", components: [
+							{content: $L("Keep screen on while reading"), flex: 1},
+							{kind: "ToggleButton", name: "keepScreenOnBtn", state: false, onChange: "saveKeepScreenOnChange"},
+						]},
+					]},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{content: $L("Volume buttons turn pages"), flex: 1},
+							{kind: "ToggleButton", name: "volumeKeysBtn", state: false, onChange: "saveVolumeKeysChange"},
+						]},
+						{content: $L("This feature works best when audio is muted."), className: "loginFormDescription"},
+					]},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
 							{content: $L("Default theme"), flex: 1},
 							{kind: "ListSelector", name: "themeSelector", onChange: "saveThemeChange", items: [
 								{caption: $L("White"), value: 0},
@@ -52,13 +65,6 @@ enyo.kind({
 								{caption: $L("Extra Large (26)"), value: 26}
 							]}
 						]},
-					]},
-					{kind: "RowGroup", components: [
-						{kind: "HFlexBox", components: [
-							{content: $L("Volume buttons turn pages"), flex: 1},
-							{kind: "ToggleButton", name: "volumeKeysBtn", state: false, onChange: "saveVolumeKeysChange"},
-						]},
-						{content: $L("This feature works best when audio is muted."), className: "loginFormDescription"},
 					]},
 					{kind: "RowGroup", style: "margin-top: 20px;", components: [
 						{kind: "Button", content: $L("Clear Library"), className: "enyo-button-negative", onclick: "confirmClearLibrary"},
@@ -96,6 +102,7 @@ enyo.kind({
 			this.$.fontSelector.setValue(settings.currentFontType || 0);
 			this.$.fontSizeSelector.setValue(settings.currentFontSize || 18);
 			this.$.volumeKeysBtn.setState(settings.volumeKeyPageTurn || false);
+			this.$.keepScreenOnBtn.setState(settings.keepScreenOnReading || false);
 		} catch (e) {
 			this.log("Error loading settings: " + e);
 		}
@@ -129,6 +136,10 @@ enyo.kind({
 
 	saveVolumeKeysChange: function() {
 		this.saveSettings("volumeKeyPageTurn", this.$.volumeKeysBtn.getState());
+	},
+
+	saveKeepScreenOnChange: function() {
+		this.saveSettings("keepScreenOnReading", this.$.keepScreenOnBtn.getState());
 	},
 
 	confirmClearLibrary: function() {

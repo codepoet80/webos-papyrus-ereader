@@ -6,7 +6,7 @@
 enyo.kind({
 	name: "ereader.contentContainer.GridViewItem",
 	kind: enyo.Control,
-	className: "coverBoxLarge gridItem",
+	className: "gridItem",
 	events: {
 		onBookSelected: ""
 	},
@@ -14,9 +14,11 @@ enyo.kind({
 		book: null
 	},
 	components: [
-		{kind: "Image", name: "coverImage", src: "images/item-cover-default-medium.png", className: "coverImageLarge", onclick: "handleBookSelected"},
-		{name: "title", className: "grid-book-title", content: "", showing: false},
-		{name: "numMarkupsContainer", className: "numMarkupsContainer markupsBannerLarge numMarkups", onclick: "handleBookSelected", showing: false, content: "0"},
+		{name: "coverFrame", className: "coverBoxLarge", onclick: "handleBookSelected", components: [
+			{kind: "Image", name: "coverImage", src: "images/item-cover-default-medium.png", className: "coverImageLarge"},
+			{name: "title", className: "grid-book-title", content: "", showing: false},
+			{name: "numMarkupsContainer", className: "numMarkupsContainer markupsBannerLarge numMarkups", showing: false, content: "0"}
+		]}
 	],
 
 	create: function() {

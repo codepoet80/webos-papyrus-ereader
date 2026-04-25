@@ -1,4 +1,7 @@
 enyo.depends(
+	// ES5 polyfills for webOS 3.0 (must load first)
+	"src/Polyfills.js",
+
 	// Mojo compatibility shim (must load first)
 	"src/MojoCompat.js",
 

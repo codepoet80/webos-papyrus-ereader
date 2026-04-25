@@ -145,7 +145,10 @@
 	-webkit-border-image: url('../../images/item-cover-background.png') 11 8 8 3 stretch repeat;
 	border-width: 11px 8px 8px 3px;
 	z-index: 3;
-	position: absolute;
+	position: relative;
+	width: 120px;
+	height: 180px;
+	margin: 0 auto;
 }
 
 .archivedBannerLarge {
@@ -487,4 +490,3 @@
 .empty-library-store-btn {
 	margin: 0 40px !important;
 }
-

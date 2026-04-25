@@ -200,7 +200,7 @@ for (i = 0; i < 91; ++i) { base91dec[base91enc[i]] = i; }
 function bytesToBase91(bytes) {
 	var end = bytes.length;
 	var ebq = 0; var en = 0;
-	var out = "";
+	var out = [];  // Accumulate into array to avoid O(n²) string concatenation
 	//Stuffing chars into the out buffer
 	for (var i = 0; i < end ; i+=1) {
 		ebq = (ebq | ((bytes[i] & 0xFF) << en));
@@ -216,20 +216,18 @@ function bytesToBase91(bytes) {
 				ebq >>= 14;
 				en -= 14;
 			}
-			var c1 = base91enc[ev % 91];
-			var c2 = base91enc[Math.floor(ev / 91)];
-			out += String.fromCharCode(c1);
-			out += String.fromCharCode(c2);
+			out.push(String.fromCharCode(base91enc[ev % 91]));
+			out.push(String.fromCharCode(base91enc[Math.floor(ev / 91)]));
 		}
 	}
 	//Adding the trailer
 	if (en > 0) {
-		out += String.fromCharCode(base91enc[ebq % 91]);
+		out.push(String.fromCharCode(base91enc[ebq % 91]));
 		if (en > 7 || ebq > 90) {
-			out += String.fromCharCode(base91enc[Math.floor(ebq / 91)]);
+			out.push(String.fromCharCode(base91enc[Math.floor(ebq / 91)]));
 		}
 	}
-	return out;
+	return out.join("");
 }
 
 function base91ToBytes(cstr) {
@@ -263,8 +261,24 @@ function base91ToBytes(cstr) {
 
 
 function bytesToBase64(bytes) {
+	// Use btoa path: build binary string in 8KB chunks with String.fromCharCode.apply
+	// to avoid O(n²) string concatenation on older JavaScript engines (webOS 3.0).
+	if (typeof btoa === "function") {
+		var CHUNK = 8192;
+		var parts = [];
+		for (var k = 0; k < bytes.length; k += CHUNK) {
+			var slice = (bytes.subarray)
+				? bytes.subarray(k, k + CHUNK)
+				: bytes.slice(k, k + CHUNK);
+			parts.push(String.fromCharCode.apply(null, slice));
+		}
+		return btoa(parts.join(""));
+	}
+
+	// Manual fallback: accumulate into array then join once at the end
+	// to avoid O(n²) string concatenation.
 	var base64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/="
-	var output = "";
+	var output = [];
 	var chr1, chr2, chr3, enc1, enc2, enc3, enc4;
 	var i = 0;
 
@@ -284,13 +298,13 @@ function bytesToBase64(bytes) {
 			enc4 = 64;
 		}
 
-		output = output +
-			base64.charAt(enc1) + base64.charAt(enc2) +
-			base64.charAt(enc3) + base64.charAt(enc4);
-
+		output.push(base64.charAt(enc1));
+		output.push(base64.charAt(enc2));
+		output.push(base64.charAt(enc3));
+		output.push(base64.charAt(enc4));
 	}
 
-	return output;
+	return output.join("");
 }
 
 function base64ToBytes(input) {

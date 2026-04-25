@@ -787,25 +787,36 @@ EpubReader.prototype.getCoverImage = function() {
 }
 
 /**
- * Convert byte array to base64 string
+ * Convert byte array to base64 string.
+ * Uses chunked String.fromCharCode.apply to avoid O(n²) string concatenation
+ * on older JavaScript engines.
  */
 EpubReader.prototype.bytesToBase64 = function(bytes) {
-	var binary = "";
-	for (var i = 0; i < bytes.length; i++) {
-		binary += String.fromCharCode(bytes[i]);
+	// Build binary string in 8KB chunks to avoid stack overflow with .apply
+	// and avoid O(n²) behavior from repeated string concatenation.
+	var CHUNK = 8192;
+	var parts = [];
+	for (var i = 0; i < bytes.length; i += CHUNK) {
+		var slice = (bytes.subarray)
+			? bytes.subarray(i, i + CHUNK)
+			: bytes.slice(i, i + CHUNK);
+		parts.push(String.fromCharCode.apply(null, slice));
 	}
-	// Use btoa if available (modern browsers), otherwise manual encoding
+	var binary = parts.join("");
+
 	if (typeof btoa === "function") {
 		return btoa(binary);
 	}
-	// Manual base64 encoding for older environments
+
+	// Manual base64 encoding fallback — accumulate into array then join once
+	// to avoid O(n²) string concatenation.
 	var base64chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-	var result = "";
-	var i = 0;
-	while (i < binary.length) {
-		var a = binary.charCodeAt(i++) || 0;
-		var b = binary.charCodeAt(i++) || 0;
-		var c = binary.charCodeAt(i++) || 0;
+	var result = [];
+	var j = 0;
+	while (j < binary.length) {
+		var a = binary.charCodeAt(j++) || 0;
+		var b = binary.charCodeAt(j++) || 0;
+		var c = binary.charCodeAt(j++) || 0;
 
 		var b1 = (a >> 2) & 0x3F;
 		var b2 = ((a & 0x3) << 4) | ((b >> 4) & 0xF);
@@ -818,11 +829,12 @@ EpubReader.prototype.bytesToBase64 = function(bytes) {
 			b4 = 64;
 		}
 
-		result += base64chars.charAt(b1) + base64chars.charAt(b2);
-		result += (b3 === 64 ? "=" : base64chars.charAt(b3));
-		result += (b4 === 64 ? "=" : base64chars.charAt(b4));
+		result.push(base64chars.charAt(b1));
+		result.push(base64chars.charAt(b2));
+		result.push(b3 === 64 ? "=" : base64chars.charAt(b3));
+		result.push(b4 === 64 ? "=" : base64chars.charAt(b4));
 	}
-	return result;
+	return result.join("");
 }
 
 // ~~~ TEXT & IMAGE RETRIEVAL ~~~

@@ -100,7 +100,13 @@ enyo.kind({
 			// Find category name
 			try {
 				var categories = JSON.parse(localStorage.getItem("ereader_categories") || "[]");
-				var cat = categories.find(function(c) { return c.id === categoryId; });
+				var cat = null;
+				for (var i = 0; i < categories.length; i++) {
+					if (categories[i].id === categoryId) {
+						cat = categories[i];
+						break;
+					}
+				}
 				if (cat) {
 					this.$.categoryTitle.setContent(cat.name);
 				}

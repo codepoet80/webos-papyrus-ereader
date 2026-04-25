@@ -39,6 +39,7 @@ enyo.kind({
 	epubReader: null,
 	htmlBook: null,
 	pageFitter: null,
+	preloaderFitter: null,   // Separate PageFitter for background preloading
 	currentStart: 0,
 	currentEnd: 0,
 	totalLength: 0,
@@ -49,10 +50,18 @@ enyo.kind({
 	isAnimating: false,
 	animationDirection: "next",
 
+	// Page cache: stores pre-rendered HTML for adjacent pages so taps are instant
+	// {nextHtml, nextStart, nextEnd, prevHtml, prevStart, prevEnd}
+	// null values mean end/beginning of book; undefined means not yet cached
+	pageCache: null,
+	preloadToken: 0,     // Incremented to invalidate in-progress preloads
+	preloadActive: false,
+
 	// Components
 	components: [
 		{name: "pageContainer", kind: "Control", className: "epub-page-container"},
-		{name: "offscreen", kind: "Control", className: "epub-offscreen"}
+		{name: "offscreen", kind: "Control", className: "epub-offscreen"},
+		{name: "preloadOffscreen", kind: "Control", className: "epub-offscreen"}
 	],
 
 	/**
@@ -142,6 +151,7 @@ enyo.kind({
 			}
 
 			self.pageFitter = new PageFitter(book, offscreenNode, 2);  // 2 = UTF-8 encoding
+			self.preloaderFitter = new PageFitter(book, self.$.preloadOffscreen.hasNode(), 2);
 
 			// Signal that the book is ready
 			self.bookReady = true;
@@ -219,6 +229,7 @@ enyo.kind({
 
 					// Create the PageFitter
 					self.pageFitter = new PageFitter(book, self.$.offscreen.hasNode(), 2);  // 2 = UTF-8 encoding
+					self.preloaderFitter = new PageFitter(book, self.$.preloadOffscreen.hasNode(), 2);
 
 					// Signal that the book is ready
 					self.bookReady = true;
@@ -240,6 +251,7 @@ enyo.kind({
 	 */
 	gotoLocation: function(location) {
 		if (!this.bookReady) return;
+		this.clearPageCache();
 
 		// Save current position to history
 		if (this.currentStart > 0) {
@@ -261,6 +273,7 @@ enyo.kind({
 	 */
 	gotoPosition: function(position) {
 		if (!this.bookReady) return;
+		this.clearPageCache();
 
 		// Save current position to history
 		if (this.currentStart > 0) {
@@ -277,6 +290,7 @@ enyo.kind({
 	 */
 	gotoBeginning: function() {
 		if (!this.bookReady) return;
+		this.clearPageCache();
 
 		this.navigationHistory.push(this.currentStart);
 		this.pageFitter.gotoPage(0, false);
@@ -301,6 +315,7 @@ enyo.kind({
 	 * Navigate back in history
 	 */
 	historyBack: function() {
+		this.clearPageCache();
 		if (this.navigationHistory.length > 0) {
 			var pos = this.navigationHistory.pop();
 			this.pageFitter.gotoPage(pos, false);
@@ -345,26 +360,57 @@ enyo.kind({
 	},
 
 	/**
-	 * Navigate to next page
+	 * Navigate to next page.
+	 * Serves from cache if available; falls back to live PageFitter computation.
 	 */
 	nextPage: function() {
+		if (!this.bookReady || this.isAnimating) return;
+
+		var useAnimation = !this.isBasicReadingMode();
+
+		// Invalidate any in-progress preload so it doesn't corrupt pageFitter state
+		if (this.preloadActive) {
+			this.preloadToken++;
+			this.preloadActive = false;
+		}
+
+		if (this.pageCache && this.pageCache.nextHtml !== undefined) {
+			var html       = this.pageCache.nextHtml;
+			var nextStart  = this.pageCache.nextStart;
+			var nextEnd    = this.pageCache.nextEnd;
+			this.pageCache = null;
+
+			if (html === null) {
+				// Cached end-of-book signal
+				this.doEndOfBook("false");
+				return;
+			}
+
+			// Apply the pre-computed position to pageFitter
+			this.pageFitter.currStart = nextStart;
+			this.pageFitter.currEnd   = nextEnd;
+
+			if (useAnimation) {
+				this.startSlideAnimation("next");
+				this.displayPageWithAnimation(html);
+			} else {
+				this.displayPage(html);
+			}
+			return;
+		}
+
+		// Cache miss - compute normally (schedulePreload fires via displayPage)
 		this.nextPageInternal(0);
 	},
 
 	/**
-	 * Internal next page with blank page skip counter
+	 * Internal next page with blank page skip counter.
+	 * Only called from nextPage() (after cache check) or recursively for blank skipping.
 	 */
 	nextPageInternal: function(blankSkipCount) {
-		console.log("EpubRenderer.nextPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no") + ", blankSkipCount=" + blankSkipCount);
-		// Only check isAnimating on initial call (blankSkipCount === 0)
-		// Recursive calls for blank page skipping should proceed even if animating
-		if (!this.bookReady || (blankSkipCount === 0 && this.isAnimating)) {
-			console.log("EpubRenderer.nextPage: ABORTED - book not ready or animating");
-			return;
-		}
+		if (!this.bookReady) return;
 
 		var screenHeight = this.getScreenHeight();
-		console.log("EpubRenderer.nextPage: screenHeight=" + screenHeight + ", calling pageFitter.getNextPage");
 		var self = this;
 		var useAnimation = !this.isBasicReadingMode();
 
@@ -374,18 +420,15 @@ enyo.kind({
 		}
 
 		this.pageFitter.getNextPage(screenHeight, function(html) {
-			console.log("EpubRenderer.nextPage callback: html=" + (html === null ? "null" : "length " + html.length));
 			if (html === null) {
 				// End of book - reset animation
 				self.resetAnimation();
-				console.log("EpubRenderer.nextPage: END OF BOOK reached");
 				self.doEndOfBook("false");
 				return;
 			}
 
 			// Check if page is blank and skip if so (max 5 consecutive blank pages)
 			if (self.isBlankPage(html) && blankSkipCount < 5) {
-				console.log("EpubRenderer.nextPage: Skipping blank page (" + (blankSkipCount + 1) + ")");
 				self.nextPageInternal(blankSkipCount + 1);
 				return;
 			}
@@ -399,31 +442,52 @@ enyo.kind({
 	},
 
 	/**
-	 * Navigate to previous page
+	 * Navigate to previous page.
+	 * Serves from cache if available; falls back to live PageFitter computation.
 	 */
 	previousPage: function() {
-		console.log("EpubRenderer.previousPage: bookReady=" + this.bookReady + ", pageFitter=" + (this.pageFitter ? "yes" : "no"));
-		if (!this.bookReady || this.isAnimating) {
-			console.log("EpubRenderer.previousPage: ABORTED - book not ready or animating");
+		if (!this.bookReady || this.isAnimating) return;
+
+		var useAnimation = !this.isBasicReadingMode();
+
+		// Invalidate any in-progress preload
+		if (this.preloadActive) {
+			this.preloadToken++;
+			this.preloadActive = false;
+		}
+
+		if (this.pageCache && this.pageCache.prevHtml !== undefined) {
+			var html      = this.pageCache.prevHtml;
+			var prevStart = this.pageCache.prevStart;
+			var prevEnd   = this.pageCache.prevEnd;
+			this.pageCache = null;
+
+			if (html === null) {
+				// Cached beginning-of-book signal
+				this.doEndOfBook("true");
+				return;
+			}
+
+			this.pageFitter.currStart = prevStart;
+			this.pageFitter.currEnd   = prevEnd;
+
+			if (useAnimation) {
+				this.startSlideAnimation("prev");
+				this.displayPageWithAnimation(html);
+			} else {
+				this.displayPage(html);
+			}
 			return;
 		}
 
-		var screenHeight = this.getScreenHeight();
-		console.log("EpubRenderer.previousPage: screenHeight=" + screenHeight + ", calling pageFitter.getPrevPage");
+		// Cache miss - compute normally
 		var self = this;
-		var useAnimation = !this.isBasicReadingMode();
+		var size = this.getScreenHeight();
+		if (useAnimation) this.startSlideAnimation("prev");
 
-		// Start slide animation (if enabled)
-		if (useAnimation) {
-			this.startSlideAnimation("prev");
-		}
-
-		this.pageFitter.getPrevPage(screenHeight, function(html) {
-			console.log("EpubRenderer.previousPage callback: html=" + (html === null ? "null" : "length " + html.length));
+		this.pageFitter.getPrevPage(size, function(html) {
 			if (html === null) {
-				// Beginning of book - reset animation
 				self.resetAnimation();
-				console.log("EpubRenderer.previousPage: BEGINNING OF BOOK reached");
 				self.doEndOfBook("true");
 				return;
 			}
@@ -446,27 +510,21 @@ enyo.kind({
 	 * Internal refresh with blank page skip counter
 	 */
 	refreshPageInternal: function(blankSkipCount) {
-		console.log("EpubRenderer.refreshPage: bookReady=" + this.bookReady);
 		if (!this.bookReady) {
-			console.log("EpubRenderer.refreshPage: ABORTED - book not ready");
 			return;
 		}
 
 		var screenHeight = this.getScreenHeight();
-		console.log("EpubRenderer.refreshPage: screenHeight=" + screenHeight);
 		var self = this;
 
 		this.pageFitter.getCurrPage(screenHeight, function(html) {
-			console.log("EpubRenderer.refreshPage callback: html=" + (html === null ? "null" : "length " + html.length));
 			if (html === null) {
-				console.log("EpubRenderer.refreshPage: FAILED to render page");
 				self.doKrfPluginError("Failed to render page");
 				return;
 			}
 
 			// If current page is blank and we haven't skipped too many, move forward
 			if (self.isBlankPage(html) && blankSkipCount < 5) {
-				console.log("EpubRenderer.refreshPage: Current page is blank, skipping forward (" + (blankSkipCount + 1) + ")");
 				self.pageFitter.getNextPage(screenHeight, function(nextHtml) {
 					if (nextHtml === null) {
 						// End of book, just show the blank page
@@ -488,6 +546,7 @@ enyo.kind({
 	setFontSize: function(size) {
 		this.fontSize = size;
 		this.applyFont();
+		this.clearPageCache();
 		if (this.bookReady) {
 			this.refreshPage();
 		}
@@ -499,6 +558,7 @@ enyo.kind({
 	setTypeFace: function(type) {
 		this.fontType = type;
 		this.applyFont();
+		this.clearPageCache();
 		if (this.bookReady) {
 			this.refreshPage();
 		}
@@ -510,6 +570,7 @@ enyo.kind({
 	setNightModeColor: function(color) {
 		this.themeColor = color;
 		this.applyTheme();
+		this.clearPageCache();
 		if (this.bookReady) {
 			this.refreshPage();
 		}
@@ -855,6 +916,112 @@ enyo.kind({
 	},
 
 	// ========================================
+	// PAGE CACHE / PRELOADING
+	// ========================================
+
+	/**
+	 * Invalidate any in-progress preload and clear the cache.
+	 * Call on font/theme changes and location jumps.
+	 */
+	clearPageCache: function() {
+		this.pageCache = null;
+		this.preloadToken++;
+		this.preloadActive = false;
+	},
+
+	/**
+	 * Schedule background preloading of the next and previous pages.
+	 * Uses a separate PageFitter instance so it never races with the user's pageFitter.
+	 * Called automatically from displayPage() after each page is shown.
+	 */
+	schedulePreload: function() {
+		if (!this.bookReady || !this.pageFitter || !this.preloaderFitter) return;
+
+		this.preloadToken++;
+		var token = this.preloadToken;
+		var self = this;
+
+		// Snapshot position now; delay slightly so the current page renders first
+		var snapStart = this.pageFitter.currStart;
+		var snapEnd = this.pageFitter.currEnd;
+
+		setTimeout(function() {
+			if (token !== self.preloadToken) return;
+			// Sync preloaderFitter to current page position
+			self.preloaderFitter.currStart = snapStart;
+			self.preloaderFitter.currEnd = snapEnd;
+			self.preloaderFitter.sanitizePosition = false;
+			self.preloadNextPage(token, snapStart, snapEnd);
+		}, 150);
+	},
+
+	/**
+	 * Background-compute the next page using preloaderFitter.
+	 * Skips blank pages (same logic as nextPageInternal).
+	 * On completion, stores result in pageCache and kicks off preloadPrevPage.
+	 */
+	preloadNextPage: function(token, savedStart, savedEnd) {
+		var self = this;
+		var size = this.getScreenHeight();
+		this.preloadActive = true;
+
+		var tryNext = function(skipCount) {
+			if (token !== self.preloadToken) {
+				self.preloadActive = false;
+				return;
+			}
+			self.preloaderFitter.getNextPage(size, function(html) {
+				if (token !== self.preloadToken) {
+					self.preloadActive = false;
+					return;
+				}
+				// Skip blank pages, same as nextPageInternal
+				if (html !== null && self.isBlankPage(html) && skipCount < 5) {
+					tryNext(skipCount + 1);
+					return;
+				}
+				if (!self.pageCache) self.pageCache = {};
+				self.pageCache.nextHtml  = html;  // null means end of book
+				self.pageCache.nextStart = self.preloaderFitter.currStart;
+				self.pageCache.nextEnd   = self.preloaderFitter.currEnd;
+				self.preloadActive = false;
+
+				// Now preload the previous page
+				if (token === self.preloadToken) {
+					// Reset preloaderFitter to the current page position before going backward
+					self.preloaderFitter.currStart = savedStart;
+					self.preloaderFitter.currEnd   = savedEnd;
+					self.preloaderFitter.sanitizePosition = false;
+					self.preloadPrevPage(token);
+				}
+			});
+		};
+		tryNext(0);
+	},
+
+	/**
+	 * Background-compute the previous page using preloaderFitter.
+	 * preloaderFitter must already be synced to the current page position before calling.
+	 */
+	preloadPrevPage: function(token) {
+		var self = this;
+		var size = this.getScreenHeight();
+		this.preloadActive = true;
+
+		this.preloaderFitter.getPrevPage(size, function(html) {
+			if (token !== self.preloadToken) {
+				self.preloadActive = false;
+				return;
+			}
+			if (!self.pageCache) self.pageCache = {};
+			self.pageCache.prevHtml  = html;  // null means beginning of book
+			self.pageCache.prevStart = self.preloaderFitter.currStart;
+			self.pageCache.prevEnd   = self.preloaderFitter.currEnd;
+			self.preloadActive = false;
+		});
+	},
+
+	// ========================================
 	// INTERNAL METHODS
 	// ========================================
 
@@ -931,6 +1098,9 @@ enyo.kind({
 
 		// Update history back button state
 		this.doEnableBackButton(this.navigationHistory.length > 0 ? "true" : "false");
+
+		// Start preloading adjacent pages in the background
+		this.schedulePreload();
 	},
 
 	/**
@@ -969,8 +1139,9 @@ enyo.kind({
 	 * Apply current theme colors
 	 */
 	applyTheme: function() {
-		var container = this.$.pageContainer.hasNode();
-		var offscreen = this.$.offscreen.hasNode();
+		var container       = this.$.pageContainer.hasNode();
+		var offscreen       = this.$.offscreen.hasNode();
+		var preloadOffscreen = this.$.preloadOffscreen.hasNode();
 
 		var bgColor, textColor;
 		switch (this.themeColor) {
@@ -991,22 +1162,24 @@ enyo.kind({
 				textColor = "#000000";
 		}
 
-		if (container) {
-			container.style.backgroundColor = bgColor;
-			container.style.color = textColor;
-		}
-		if (offscreen) {
-			offscreen.style.backgroundColor = bgColor;
-			offscreen.style.color = textColor;
-		}
+		var applyColors = function(el) {
+			if (el) {
+				el.style.backgroundColor = bgColor;
+				el.style.color = textColor;
+			}
+		};
+		applyColors(container);
+		applyColors(offscreen);
+		applyColors(preloadOffscreen);
 	},
 
 	/**
 	 * Apply current font settings
 	 */
 	applyFont: function() {
-		var container = this.$.pageContainer.hasNode();
-		var offscreen = this.$.offscreen.hasNode();
+		var container        = this.$.pageContainer.hasNode();
+		var offscreen        = this.$.offscreen.hasNode();
+		var preloadOffscreen = this.$.preloadOffscreen.hasNode();
 
 		var fontFamily = this.fontType === 0 ? "Georgia, serif" : "Verdana, sans-serif";
 		var fontSize = this.fontSize + "px";
@@ -1022,6 +1195,7 @@ enyo.kind({
 
 		applyStyles(container);
 		applyStyles(offscreen);
+		applyStyles(preloadOffscreen);
 	},
 
 	/**
@@ -1046,9 +1220,11 @@ enyo.kind({
 	 * Clean up resources
 	 */
 	destroy: function() {
+		this.clearPageCache();
 		this.epubReader = null;
 		this.htmlBook = null;
 		this.pageFitter = null;
+		this.preloaderFitter = null;
 		this.inherited(arguments);
 	}
 });

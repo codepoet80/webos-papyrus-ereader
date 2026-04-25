@@ -1,6 +1,6 @@
 
 /** The size of each chunk in plain-text bytes. */
-HTMLBook.chunkSize = 4096;
+HTMLBook.chunkSize = 16384;
 
 /**
  * Creates an HTML book from a reader, or simply loads it from an internal DB.
@@ -12,16 +12,19 @@ HTMLBook.chunkSize = 4096;
  * @param {Function} callback the function to call after everything is loaded.
  * 		It is called with this object as a parameter.
  */
-function HTMLBook(reader, readerIsPlainText, dbName, callback) {
+function HTMLBook(reader, readerIsPlainText, dbName, callback, progressCallback) {
 	//console.log("Constructor");
 	this.reader = reader;
 	this.readerIsPlainText = readerIsPlainText;
 	this.dbName = "ext:t" + Database.makeSaneName(dbName);
 	this.callback = callback;
-	
+	// Optional: called each time a chunk or image is processed, so the caller
+	// can reset a watchdog timer.  null = disabled.
+	this.progressCallback = progressCallback || null;
+
 	//Storing the current reader position for load progress
 	this.currLoadPos = 0;
-	
+
 	//A simple array used to remember which images were already stored
 	this.imgNameBuffer = [];
 	
@@ -50,11 +53,14 @@ HTMLBook.prototype.loadDefaults = function() {
 	//The buffer for the image data
 	this.lastImageData = null;
 	this.lastImageLabel = null;
+	this.storedImageCount = 0;
+	this.lastImportProgressPct = -1;
+	this.lastImportProgressTime = 0;
 	
 	//The file's fixed bookmarks, used for links
 	//See: LibraryEntry.js; Bookmark object
 	this.bookmarks = new Array();
-	
+
 	//Checking if the reader is capable of reading imgs
 	if (this.reader != null && this.reader.getImage) {
 		this.isImgCapable = true;
@@ -69,7 +75,7 @@ HTMLBook.prototype.loadDefaults = function() {
 // ~~~ Database Loading methods ~~~ 
 
 HTMLBook.prototype.loadDB = function(isReady) {
-	//console.log("loadDB; ready = " + isReady);
+	enyo.log("HTMLBook.loadDB: ready=" + isReady + ", importing=" + (this.reader != null));
 	if (isReady == false) {
 		this.dbOpenFail();
 		return;
@@ -79,19 +85,16 @@ HTMLBook.prototype.loadDB = function(isReady) {
 		//Just loading from the DB
 		this.bookDB.read("meta", this.dbOpenLoad.bind(this));
 	} else {
-		//Replacing the entry with new content
-		this.bookDB.verifyConnection(
-			this.bookDB.read.bind(
-				this,
-				"meta", 
-				this.dbOpenReplace.bind(this)
-			)
-	    );
+		enyo.log("HTMLBook.loadDB: starting fresh import");
+		// Imports always use a generated database name, so there is no existing
+		// metadata to preserve. Start reading immediately and avoid another WebSQL
+		// read before visible progress can begin.
+		this.readFromReader(0, null);
 	}
 }
 
 HTMLBook.prototype.dbOpenReplace = function(data) {
-	//console.log("dbOpenReplace");
+	enyo.log("HTMLBook.dbOpenReplace: meta " + (data == null ? "not found" : "found"));
 	
 	//Checking if metadata was present
 	if (data == null) {
@@ -106,10 +109,10 @@ HTMLBook.prototype.dbOpenReplace = function(data) {
 }
 
 HTMLBook.prototype.dbOpenLoad = function(data) {
-	console.log("HTMLBook.dbOpenLoad: loading metadata from database");
+	enyo.log("HTMLBook.dbOpenLoad: loading metadata from database");
 	var fail = function(msg) {
 		//There is no metadata
-		console.warn("HTMLBook.dbOpenLoad FAILED: " + msg);
+		enyo.warn("HTMLBook.dbOpenLoad FAILED: " + msg);
 		this.isReady = false;
 		this.callback(this);
 	}.bind(this);
@@ -131,7 +134,7 @@ HTMLBook.prototype.dbOpenLoad = function(data) {
 	this.bufferOffsets = meta.bufferOffsets;
 	this.bookmarks = meta.bookmarks;
 
-	console.log("HTMLBook.dbOpenLoad: SUCCESS - length=" + this.length + ", numBuffers=" + this.numBuffers + ", bufferOffsets.length=" + this.bufferOffsets.length + ", bookmarks=" + this.bookmarks.length);
+	enyo.log("HTMLBook.dbOpenLoad: SUCCESS - length=" + this.length + ", numBuffers=" + this.numBuffers + ", bufferOffsets.length=" + this.bufferOffsets.length + ", bookmarks=" + this.bookmarks.length);
 
 	//Flagging ourselves as ready
 	this.isReady = true;
@@ -142,7 +145,7 @@ HTMLBook.prototype.dbOpenLoad = function(data) {
 
 HTMLBook.prototype.dbOpenFail = function() {
 	var msg = "Could not open HTML Book database."; 
-    console.warn(msg); 
+    enyo.warn(msg); 
     Mojo.Controller.errorDialog(msg);
 	//Setting the flags
 	this.isReady = false;
@@ -160,32 +163,55 @@ HTMLBook.prototype.dbOpenFail = function() {
  */
 HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall) {
 	//console.log("readFromReader");
-	
+
+	// Signal progress on every chunk so the watchdog resets and the spinner
+	// shows a percentage.  The DOM update is throttled in keepAlive so the
+	// browser can repaint between updates.
+	if (this.progressCallback) {
+		try {
+			var totalLen = (this.reader && this.reader.getLength) ? this.reader.getLength() : 0;
+			var pct = (totalLen > 0) ? Math.min(99, Math.round(currPos * 100 / totalLen)) : 0;
+			var now = (new Date()).getTime();
+			if (this.lastImportProgressPct < 0 || pct >= this.lastImportProgressPct + 5 || pct >= 99 || now - this.lastImportProgressTime >= 5000) {
+				this.lastImportProgressPct = pct;
+				this.lastImportProgressTime = now;
+				var progressMsg = "Processing text " + pct + "%";
+				enyo.log("HTMLBook progress: " + progressMsg);
+				this.progressCallback(progressMsg);
+			}
+		} catch (e) {
+			enyo.warn("HTMLBook progress callback failed: " + e);
+		}
+	}
+
 	if (!isRecursiveCall) {
 		//Resetting the img buffer
 		this.imgNameBuffer.length = 0;
+		this.storedImageCount = 0;
+		this.lastImportProgressPct = -1;
+		this.lastImportProgressTime = 0;
 	}
-	
+
 	//Saving the current loading position
 	this.currLoadPos = currPos;
 	
-	//What to do after the last chunk
+	//What to do after the last chunk has been read and all buffers flushed
 	var finish = function(){
 		//console.log("Calling finish.");
 		//We have finished loading from the reader. Invalidating it
 		this.reader = null;
 		//We signify that we're ready
 		this.isReady = true;
-		
+
 		//We save our own metadata
 		this.saveMetaData();
-		
+
 		//console.log("The book has a length of: " + this.getLength());
-		
+
 		//And we call our callback
 		this.callback(this);
 	}.bind(this);
-	
+
 	//console.log("Reading chunk for pos " + currPos);
 	//Trying to read another chunk
 	var byteBuf = this.reader.read(currPos, HTMLBook.chunkSize);
@@ -193,13 +219,13 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 		finish();
 		return;
 	}
-	
+
 	//console.log("Read " + byteBuf.length + " bytes");
-	
+
 	//Constructing an HTMLBuffer from that chunk
 	var buffer = new HTMLBuffer(openTags);
 	var dropped = buffer.addBytes(byteBuf, this.readerIsPlainText);
-	
+
 	//Checking if the document ends malformed on an open tag
 	if (byteBuf.length - dropped <= 0) {
 		//There is nothing to do anymore, since the end's malformed
@@ -258,7 +284,7 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 					break;
 					
 				case "img":
-					console.log("HTMLBook: Found img " + tag.toString());
+					enyo.log("HTMLBook: Found img " + tag.toString());
 					//IMG tag cause us to break back to WebOS
 					breakForWebOS = true;
 					//Checking if we can read imgs at all
@@ -278,20 +304,31 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 					//Now, we try to fetch the img data from the buffer
 					var bytes = this.reader.getImage(label);
 					if (bytes == null || bytes.length <= 0) {
-						console.warn("Image data invalid/empty.");
+						enyo.warn("Image data invalid/empty.");
 						break;
 					}
 					//Storing the bytes in the DB and in the array
 					var name = "img" + Database.makeSaneName(label);
+					this.storedImageCount += 1;
+					if (this.progressCallback) {
+						var imageSize = (typeof(bytes) == "string") ? bytes.length : bytes.length;
+						var imageKb = Math.max(1, Math.round(imageSize / 1024));
+						this.progressCallback("Encoding image " + this.storedImageCount);
+					}
 					//Now we check whether getImage returned a base64 string or raw bytes
 					if (typeof(bytes) == "string") {
-						console.log("HTMLBook: Image data already Base64");
+						enyo.log("HTMLBook: Image data already Base64");
 						this.imgNameBuffer.push(label);
 						this.bookDB.write(name, bytes);
 					} else {
-						console.log("HTMLBook: Image data must be Base64-ed");
+						enyo.log("HTMLBook: Image data must be Base64-ed");
 						this.imgNameBuffer.push(label);
-						this.bookDB.write(name, bytesToBase64(bytes));	
+						this.bookDB.write(name, bytesToBase64(bytes));
+					}
+					// Signal again after conversion/write so the watchdog knows the
+					// expensive synchronous part completed.
+					if (this.progressCallback) {
+						this.progressCallback("Storing image " + this.storedImageCount + "...");
 					}
 					break;
 			}
@@ -307,30 +344,13 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 		self.bind(this, buffer, pos+1, self, callback).defer();
 	}
 	
-	//And the function that save the buffer and calls the next readFromReader
 	var storeWorker = function(buffer, currPos, openTags) {
-		//console.log("HTMLBook: storeWorker");
-		//Fetching the new open tags
 		openTags = buffer.getOpenTagsEnd();
-	    
-		/*
-		console.log("Number of open tags: " + openTags.length);
-		if (openTags.length > 0) {
-			console.log("Last one: " + openTags[openTags.length-1].toString());		
-		}
-		*/
-	    
-		//Saving the buffer offsets
+
 		this.bufferOffsets[this.numBuffers] = this.length;
-			
-		//Adding the plain-text length of the read chunk to our length 
 		this.length += buffer.getLength();
-		
-		//Going to the next chunk
 		this.numBuffers += 1;
-		
-		//Adding the chunk to the internal database, and calling
-		//the next read once it's stored
+
 		this.saveBufferData(this.numBuffers - 1, buffer,
 			this.readFromReader.bind(this, currPos, openTags, true)
 		);
@@ -368,14 +388,14 @@ HTMLBook.prototype.getLoadProgress = function() {
 // ~~~ Rich Text Fetching methods ~~~
 
 HTMLBook.prototype.read = function(start, length, callback) {
-	console.log("HTMLBook.read: start=" + start + ", length=" + length + ", totalLength=" + this.getLength() + ", numBuffers=" + this.numBuffers + ", bufferOffsets.length=" + this.bufferOffsets.length);
+	enyo.log("HTMLBook.read: start=" + start + ", length=" + length + ", totalLength=" + this.getLength() + ", numBuffers=" + this.numBuffers + ", bufferOffsets.length=" + this.bufferOffsets.length);
 	//Sanity check
 	if (typeof(callback) == "undefined") {
-		console.error("HTMLBook.read() absolutely needs a callback.")
+		enyo.error("HTMLBook.read() absolutely needs a callback.")
 		return null;
 	}
 	if (start < 0 || length < 0 || start > this.getLength()) {
-		console.log("HTMLBook.read: invalid params (start=" + start + ", length=" + length + ", bookLen=" + this.getLength() + "), calling callback with empty array");
+		enyo.log("HTMLBook.read: invalid params (start=" + start + ", length=" + length + ", bookLen=" + this.getLength() + "), calling callback with empty array");
 		callback([]);
 		return null;
 	}
@@ -386,13 +406,13 @@ HTMLBook.prototype.read = function(start, length, callback) {
 	var startChunk = this.getBufferContainment(start);
 	var endChunk = this.getBufferContainment(start + length);
 
-	console.log("HTMLBook.read: startChunk=" + startChunk + ", endChunk=" + endChunk);
+	enyo.log("HTMLBook.read: startChunk=" + startChunk + ", endChunk=" + endChunk);
 
 	//Checking if we can fetch anything at all
 	if (startChunk < 0 || startChunk >= this.bufferOffsets.length ||
 			endChunk < 0 || endChunk >= this.bufferOffsets.length) {
 		//This shouldn't happen - but we MUST call callback to avoid hanging
-		console.error("HTMLBook.read: Invalid chunks! startChunk=" + startChunk + ", endChunk=" + endChunk + ", bufferOffsets.length=" + this.bufferOffsets.length);
+		enyo.error("HTMLBook.read: Invalid chunks! startChunk=" + startChunk + ", endChunk=" + endChunk + ", bufferOffsets.length=" + this.bufferOffsets.length);
 		callback([]);
 		return null;
 	}
@@ -519,7 +539,7 @@ HTMLBook.prototype.assembleRichText = function(start, length, buffers, offset, c
 		length -= richText.bodyPlainBytesNum;
 	}
 	//Now, we call the callback with the finished byteBuf
-	console.log("HTMLBook.assembleRichText: result byteBuf length=" + byteBuf.length + ", numBuffers=" + buffers.length);
+	enyo.log("HTMLBook.assembleRichText: result byteBuf length=" + byteBuf.length + ", numBuffers=" + buffers.length);
 	callback(byteBuf);
 }
 
@@ -538,7 +558,7 @@ HTMLBook.prototype.getPosForBookmarkLabel = function(label) {
 	//console.log("getPosForBookmarkLabel: " + label);
 	for (var i = 0; i < this.bookmarks.length; i+=1) {
 		var bm = this.bookmarks[i];
-		console.log("Comparing with: " + bm.label);
+		enyo.log("Comparing with: " + bm.label);
 		if (bm.label == label) {
 			return bm.position;
 		}
@@ -634,10 +654,10 @@ HTMLBook.prototype.saveBufferData = function(bufferNum, buffer, callback) {
  * @param {Object} callback the function to call once the buffer is loaded.
  */
 HTMLBook.prototype.loadBufferData = function(bufferNum, callback) {
-	console.log("HTMLBook.loadBufferData: bufferNum=" + bufferNum + ", numBuffers=" + this.numBuffers);
+	enyo.log("HTMLBook.loadBufferData: bufferNum=" + bufferNum + ", numBuffers=" + this.numBuffers);
 	//Sanity check
 	if (bufferNum < 0 || bufferNum >= this.numBuffers) {
-		console.error("HTMLBook.loadBufferData: Invalid bufferNum=" + bufferNum + " (numBuffers=" + this.numBuffers + ")");
+		enyo.error("HTMLBook.loadBufferData: Invalid bufferNum=" + bufferNum + " (numBuffers=" + this.numBuffers + ")");
 		callback(null);
 		return;  // Bug fix: was missing return!
 	}
@@ -658,7 +678,7 @@ HTMLBook.prototype.loadBufferData = function(bufferNum, callback) {
 		function(num, data) {
 			//Checking if there was such a buffer
 			if (data && data != null) {
-				console.log("HTMLBook.loadBufferData: loaded buffer " + num + ", data length=" + (data[0] ? data[0].length : 0));
+				enyo.log("HTMLBook.loadBufferData: loaded buffer " + num + ", data length=" + (data[0] ? data[0].length : 0));
 				//Creating a new buffer and copying the values
 				var buf = new HTMLBuffer(null);
 				buf.loadFromSaveState(data[0]);
@@ -673,7 +693,7 @@ HTMLBook.prototype.loadBufferData = function(bufferNum, callback) {
 				callback(buf);
 			} else {
 				//Failure to load
-				console.error("HTMLBook.loadBufferData: FAILED to load buffer " + num + " from database!");
+				enyo.error("HTMLBook.loadBufferData: FAILED to load buffer " + num + " from database!");
 				callback(null);
 			}
 		}.bind(this, bufferNum)
@@ -704,7 +724,7 @@ HTMLBook.prototype.getImages = function(labels, callback, result) {
 }
 
 HTMLBook.prototype.getImage = function(label, callback) {
-	console.log("HTMLBook: getImage " + label);
+	enyo.log("HTMLBook: getImage " + label);
 	//Checking the buffer
 	if (this.lastImageLabel == label) {
 		//console.log("Returned a buffered img!")
@@ -717,14 +737,14 @@ HTMLBook.prototype.getImage = function(label, callback) {
 		function(label, data) {
 			//Checking if there was such a buffer
 			if (data && data != null && data.length > 0) {
-				console.log("getImage okay.");
+				enyo.log("getImage okay.");
 				//Saving this data as our last buffered image
 				this.lastImageData = data[0];
 				this.lastImageLabel = label;
 				callback(data[0]);
 			} else {
 				//Failure to load
-				console.log("No such image");
+				enyo.log("No such image");
 				callback(null);
 			}
 		}.bind(this, label)

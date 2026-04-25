@@ -28,7 +28,7 @@ enyo.kind({
 		{name: "loadingPopup", kind: "Popup", className: "spinner-popup", lazy: false, scrim: true, modal: true, components: [
 			{kind: "VFlexBox", align: "center", components: [
 				{kind: "Spinner", showing: true},
-				{content: "Loading book...", style: "color: white; margin-top: 10px;"}
+				{name: "loadingText", content: "Loading book...", style: "color: white; margin-top: 10px;"}
 			]}
 		]}
 	],
@@ -57,6 +57,19 @@ enyo.kind({
 		} catch (e) {
 			return false;
 		}
+	},
+
+	isKeepScreenOnEnabled: function() {
+		try {
+			var settings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
+			return settings.keepScreenOnReading === true;
+		} catch (e) {
+			return false;
+		}
+	},
+
+	applyScreenTimeout: function(keepOn) {
+		enyo.windows.setWindowProperties(window, {blockScreenTimeout: keepOn});
 	},
 
 	/**
@@ -120,10 +133,7 @@ enyo.kind({
 	 * Volume Up = Next Page, Volume Down = Previous Page
 	 */
 	handleVolumeKey: function(inSender, inResponse) {
-		console.log("BookReader: handleVolumeKey() - Raw response: " + JSON.stringify(inResponse));
-
 		if (!this.pluginReady) {
-			console.log("BookReader: Plugin not ready, ignoring volume key");
 			return;
 		}
 
@@ -131,28 +141,20 @@ enyo.kind({
 		var key = inResponse.key;
 		var state = inResponse.state;
 
-		console.log("BookReader: Volume key event - key: " + key + ", state: " + state);
-
 		// Only respond to key down events (not key up)
 		if (state !== "down") {
-			console.log("BookReader: Ignoring key up event");
 			return;
 		}
 
 		// Hide overlays if showing before turning page
 		if (this.overlaysShowing) {
-			console.log("BookReader: Hiding overlays before page turn");
 			this.hideOverlays();
 		}
 
 		if (key === "volume_up") {
-			console.log("BookReader: Volume UP pressed - turning to NEXT page");
 			this.$.body.nextPage();
 		} else if (key === "volume_down") {
-			console.log("BookReader: Volume DOWN pressed - turning to PREVIOUS page");
 			this.$.body.previousPage();
-		} else {
-			console.log("BookReader: Unknown volume key: " + key);
 		}
 	},
 
@@ -179,6 +181,9 @@ enyo.kind({
 		console.log("BookReader: handleLibrarySelected - Stopping volume key listener");
 		this.stopVolumeKeyListener();
 
+		// Always restore screen timeout when leaving the reader
+		this.applyScreenTimeout(false);
+
 		if (this.pluginReady) {
 			this.saveReadingPosition();
 		}
@@ -196,7 +201,10 @@ enyo.kind({
 		this.log(JSON.stringify(bookData));
 		this.bookData = bookData;
 
-		// Show loading spinner
+		// Show loading spinner (reset message in case a previous book changed it)
+		if (this.$.loadingText) {
+			this.$.loadingText.setContent("Loading book...");
+		}
 		this.$.loadingPopup.openAtCenter();
 
 		this.$.top_row.$.bookTitle.setContent(bookData.title);
@@ -224,10 +232,18 @@ enyo.kind({
 		// Start listening for volume key events for page turning
 		console.log("BookReader: handlePluginReady - Starting volume key listener");
 		this.startVolumeKeyListener();
+
+		// Apply the user's screen timeout preference now that reading is active
+		this.applyScreenTimeout(this.isKeepScreenOnEnabled());
 	},
 
 	handlePluginStarted: function() {
 		this.pluginStarted = true;
+		// Book data is loaded; PageFitter is now laying out the first page.
+		// Update the spinner so the user knows something is happening.
+		if (this.$.loadingText) {
+			this.$.loadingText.setContent("Rendering page...");
+		}
 	},
 
 	handleTocAvailableChanged: function(inSender, available) {
@@ -361,32 +377,24 @@ enyo.kind({
 		// Handle touch/click for page turning
 		// Tap zones: left 30% = prev, right 30% = next, center 40% = overlays
 		var x = inEvent.pageX || inEvent.clientX;
-		var y = inEvent.pageY || inEvent.clientY;
 		var width = window.innerWidth;
-
-		console.log("BookReader.handleMouseDown: x=" + x + ", y=" + y + ", width=" + width + ", overlaysShowing=" + this.overlaysShowing + ", pluginReady=" + this.pluginReady);
 
 		if (x < width * 0.30) {
 			// Left 30% - previous page
 			if (!this.overlaysShowing) {
-				console.log("BookReader: Triggering PREVIOUS page");
 				this.$.body.previousPage();
 			} else {
-				console.log("BookReader: Hiding overlays (left tap while overlays showing)");
 				this.hideOverlays();
 			}
 		} else if (x > width * 0.70) {
 			// Right 30% - next page
 			if (!this.overlaysShowing) {
-				console.log("BookReader: Triggering NEXT page");
 				this.$.body.nextPage();
 			} else {
-				console.log("BookReader: Hiding overlays (right tap while overlays showing)");
 				this.hideOverlays();
 			}
 		} else {
 			// Center 40% - toggle overlays
-			console.log("BookReader: Center tap - toggling overlays");
 			this.showOverlays();
 		}
 	},

@@ -225,10 +225,15 @@ enyo.kind({
 	initializeBookCompleted: function() {
 		this.log("Book initialization completed");
 		if (!this.bookInitialized && this.pluginReady) {
-			enyo.asyncMethod(this, function() {
-				this.bookInitialized = true;
-				this.doPluginReady();
-			});
+			this.bookInitialized = true;
+			// Don't fire doPluginReady yet.  The page is blank until PageFitter
+			// finishes its binary search (dozens of WebSQL + image reads on a
+			// heavy book).  We set waitingForFirstPage so doRefreshPage fires
+			// doPluginReady once actual HTML is in the container.
+			this.waitingForFirstPage = true;
+			// Signal that the book data is loaded and rendering has started,
+			// so BookReader can update the loading spinner message.
+			this.doPluginStarted();
 		}
 	},
 
@@ -462,6 +467,14 @@ enyo.kind({
 	 * locationInfo format: "StartLoc-EndLoc#Percent%#StartPos-EndPos"
 	 */
 	doRefreshPage: function(inSender, locationInfo, isTOCAvailable) {
+		// First page is now in the DOM — tell BookReader to close the spinner
+		// and show the toolbars.  On slow books this can be many seconds after
+		// initializeBookCompleted, so we deliberately delay until here.
+		if (this.waitingForFirstPage) {
+			this.waitingForFirstPage = false;
+			this.doPluginReady();
+		}
+
 		this.log("Page refreshed: " + locationInfo);
 		var locationText = locationInfo.split("#");
 		var percent = (locationText[1].split("%"))[0];

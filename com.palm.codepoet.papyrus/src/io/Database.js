@@ -24,24 +24,14 @@ Database.prototype.init = function(dbname,version,callback) {
 	
 	if (this.db) {
 		var setAutoVac = function(success) {
-			//console.log("setAutoVac -> " + success);
-			var readyOrCreate = function(exists) {
-				if (exists) {
-					this.isReady = true;
+			// Avoid a separate sqlite_master lookup here. On webOS WebSQL that
+			// extra startup transaction can be delayed behind large import writes.
+			this.createTable("data", "name TEXT PRIMARY KEY, value TEXT",
+				function(created) {
+					this.isReady = created;
 					this.callback(this.isReady);
-				} else {
-					this.createTable("data", "name TEXT PRIMARY KEY, value TEXT",
-						function(created) {
-							//We set the autoVacuum pragma
-							//this.setAutoVacuum(1);
-							this.isReady = created;
-							this.callback(this.isReady);
-						}.bind(this)
-					);
-				}
-			}.bind(this);
-			//Checking the for the existence of "data"
-			this.tableExists("data", readyOrCreate);
+				}.bind(this)
+			);
 		}.bind(this);
 		//Setting the auto-vacuum pragma
 		this.setAutoVacuum(1, setAutoVac);
@@ -105,15 +95,18 @@ Database.prototype.select = function(table, retCol, matchCol, matchVal, callback
 						callback(null);
 					} else {
 						//console.log("Select returned something.");
-						callback(SQLResultSet);	
+						callback(SQLResultSet);
 					}
 				}.bind(this, callback),
-				function(callback, tx, error) { //onFailure
+				function(callback, tx, error) { //onFailure (statement error)
 					//console.log("Select failed");
 					callback(null);
 				}.bind(this, callback)
 			)
-        }.bind(this, table, retCol, matchCol, matchVal, callback)
+        }.bind(this, table, retCol, matchCol, matchVal, callback),
+		function(error) { // transaction error callback - prevents silent hang
+			callback(null);
+		}
 	);
 }
 
@@ -163,17 +156,57 @@ Database.prototype.write = function(name, value, callback) {
 			//console.log("Query = " + sql);
             tx.executeSql(sql, [value],
 				function(callback, tx, SQLResultSet) { //onSuccess
-					//console.log("Write success");				
+					//console.log("Write success");
 					callback(true);
 				}.bind(this, callback),
-				function(callback, tx, error) { //onFailure
+				function(callback, tx, error) { //onFailure (statement error)
 					//console.log("Write failure");
 					callback(false);
 				}.bind(this, callback)
 			)
-        }.bind(this, name, value, callback)
+        }.bind(this, name, value, callback),
+		function(error) { // transaction error callback - prevents silent hang
+			enyo.warn("Database.write transaction error: " + (error ? error.message : "unknown"));
+			callback(false);
+		}
 	);
 }
+
+/**
+ * Writes multiple name/value pairs in a single database transaction.
+ * Much faster than N individual write() calls because it incurs only one
+ * transaction open/commit/disk-flush instead of N.
+ * @param {Array} pairs  Array of {name, value} objects to insert.
+ * @param {Function} callback  Called with true on success, false on failure.
+ */
+Database.prototype.writeBatch = function(pairs, callback) {
+	if (!callback) callback = function() {};
+	if (!pairs || pairs.length === 0) { callback(true); return; }
+	if (this.isReady === false) { callback(false); return; }
+
+	this.db.transaction(
+		function(pairs, callback, tx) {
+			for (var i = 0; i < pairs.length; i++) {
+				var sql = "INSERT OR REPLACE INTO data (name,value) values ('" +
+					pairs[i].name + "', ?);";
+				tx.executeSql(sql, [pairs[i].value],
+					null,  // individual statement success - handled at transaction level
+					function(callback, tx, error) {  // statement error - abort transaction
+						enyo.warn("writeBatch statement error: " + error.message);
+						return true;  // returning true aborts the transaction
+					}.bind(this, callback)
+				);
+			}
+		}.bind(this, pairs, callback),
+		function(error) {  // transaction error
+			enyo.warn("Database.writeBatch transaction error: " + (error ? error.message : "unknown"));
+			callback(false);
+		},
+		function() {  // transaction success
+			callback(true);
+		}
+	);
+};
 
 Database.prototype.remove = function(name, callback) {
 	if (!callback) callback = function() {};
@@ -186,7 +219,7 @@ Database.prototype.remove = function(name, callback) {
 Database.prototype.createTable = function(name, scheme, callback) {
 	if (!callback) callback = function() {};
 	//console.log("createTable: " + name);
-	var sql = "CREATE TABLE " + name + " (" + scheme + ");";
+	var sql = "CREATE TABLE IF NOT EXISTS " + name + " (" + scheme + ");";
 	this.executeBooleanSQL(sql, callback);
 }
 
@@ -245,14 +278,18 @@ Database.prototype.executeBooleanSQL = function(sql, callback) {
 				function(callback, tx, SQLResultSet) { //onSuccess
 					callback(true);
 				}.bind(this, callback),
-				function(callback, tx, error) { //onFailure
-					console.warn("SQL Error: Code " + error.code);
-					console.warn("SQL Error: Message: " + error.message);
+				function(callback, tx, error) { //onFailure (statement error)
+					enyo.warn("SQL Error: Code " + error.code);
+					enyo.warn("SQL Error: Message: " + error.message);
 					callback(false);
 				}.bind(this, callback)
 			);
 			//console.log("Query sent");
-        }.bind(this, sql, callback)
+        }.bind(this, sql, callback),
+		function(error) { // transaction error callback - prevents silent hang
+			enyo.warn("executeBooleanSQL transaction error: " + (error ? error.message : "unknown"));
+			callback(false);
+		}
 	);
 }
 
@@ -280,7 +317,9 @@ Database.prototype.verifyConnection = function(callback) {
 	var timeStamp = (new Date()).valueOf();
 
 	var verifyCompareValue = function(val) {
-		if (val==timeStamp) { //db connection is live
+		// read() returns an array of row values, so unwrap before comparing.
+		var readVal = (val && val.length > 0) ? val[0] : null;
+		if (readVal == timeStamp) { //db connection is live
 			callback();
 		}
 		else { // db connection is dead, re-initialize

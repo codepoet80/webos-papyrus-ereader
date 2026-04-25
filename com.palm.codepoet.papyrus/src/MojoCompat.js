@@ -298,6 +298,13 @@ if (!Array.prototype.clone) {
 	};
 }
 
+// Array.prototype.last - Prototype.js feature used by the pReader engine
+if (!Array.prototype.last) {
+	Array.prototype.last = function() {
+		return this.length > 0 ? this[this.length - 1] : undefined;
+	};
+}
+
 // Element.prototype.update - Prototype.js feature (sets innerHTML)
 if (typeof Element !== "undefined" && !Element.prototype.update) {
 	Element.prototype.update = function(content) {

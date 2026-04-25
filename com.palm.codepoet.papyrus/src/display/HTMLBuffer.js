@@ -81,54 +81,42 @@ HTMLBuffer.prototype.loadFromSaveState = function(data) {
 }
 
 HTMLBuffer.prototype.getSaveState = function() {
-	//console.log("getSaveState");
-	var state = "";
+	// Use an array + join to avoid O(n²) string concatenation during tag serialization.
+	var parts = [];
+
 	//Writing out the openTags on start
-	state += this.openTagsStart.length + ";"
+	parts.push(this.openTagsStart.length + ";");
 	for (var i = 0; i < this.openTagsStart.length; i+=1) {
-		state += escape(this.openTagsStart[i].toString()) + ";"		
+		parts.push(escape(this.openTagsStart[i].toString()) + ";");
 	}
 	//Writing out the openTags on end
-	state += this.openTagsEnd.length + ";"
+	parts.push(this.openTagsEnd.length + ";");
 	for (var i = 0; i < this.openTagsEnd.length; i+=1) {
-		state += escape(this.openTagsEnd[i].toString()) + ";"		
+		parts.push(escape(this.openTagsEnd[i].toString()) + ";");
 	}
 	//Writing out the tags
-	state += (this.tags.length * 2) + ";"
+	parts.push((this.tags.length * 2) + ";");
 	for (var i = 0; i < this.tags.length; i+=1) {
-		state += escape(this.tags[i].toString()) + ";"
-		state += this.tags[i].position + ";"
+		parts.push(escape(this.tags[i].toString()) + ";");
+		parts.push(this.tags[i].position + ";");
 	}
-	
-	//Now we store the plain text; the type string selects the storage mode
-	var type = (this.plainBytes.length > 0)
-		? "zLibBase91" : "null";
-	state += type + ";";
-	switch (type) {
-		case "null":
-			//There are simply no plain bytes to store
-			state += ";";
-			break;
-		case "hex":
-			state += bytesToHex(this.plainBytes) + ";";
-			break;
-		case "base64":
-			state += bytesToBase64(this.plainBytes) + ";";
-			break;
-		case "base91":
-			state += bytesToBase91(this.plainBytes) + ";";
-			break;
-		case "zLibBase64":
-			var comp = new Deflate().compress(this.plainBytes, 9);
-			state += bytesToBase64(comp) + ";";
-			break;
-		case "zLibBase91":
-			var comp = new Deflate().compress(this.plainBytes, 9);
-			state += bytesToBase91(comp) + ";";
-			break;
+
+	// Store plain bytes as uncompressed base91.
+	// We deliberately avoid zlib compression here: Deflate.compress() at
+	// level 9 is O(n * 32768) in pure JavaScript — on the HP TouchPad it
+	// takes several seconds per 4KB chunk, making a 200KB book take 5+
+	// minutes. base91 with no compression is fast and the DB size overhead
+	// (~23%) is well within webOS's 5MB WebSQL limit.
+	// loadFromSaveState() handles both "base91" and legacy "zLibBase91"
+	// entries, so previously imported books still open correctly.
+	if (this.plainBytes.length > 0) {
+		parts.push("base91;");
+		parts.push(bytesToBase91(this.plainBytes) + ";");
+	} else {
+		parts.push("null;;");
 	}
-	//Now, we can return the string
-	return state;
+
+	return parts.join("");
 }
 
 /**

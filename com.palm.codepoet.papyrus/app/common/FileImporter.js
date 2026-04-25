@@ -13,10 +13,13 @@ function FileImporter() {
  * @param {String} filePath - Path to the ePub file
  * @param {Function} callback - Called with (bookData, error)
  */
-FileImporter.prototype.importEpub = function(filePath, callback) {
+FileImporter.prototype.importEpub = function(filePath, callback, keepAlive) {
 	var self = this;
+	// keepAlive() is called at each major milestone so the caller can reset
+	// a progress-based watchdog timer.  It is optional.
+	var ping = keepAlive || function() {};
 
-	console.log("FileImporter.importEpub: " + filePath);
+	enyo.log("FileImporter.importEpub: " + filePath);
 
 	// Validate file path
 	if (!filePath || filePath.length === 0) {
@@ -41,18 +44,19 @@ FileImporter.prototype.importEpub = function(filePath, callback) {
 		fileUrl = "file://" + encodeURI(pathPart);
 	}
 
-	console.log("Loading file URL: " + fileUrl);
+	enyo.log("Loading file URL: " + fileUrl);
 
 	// Load the file - File constructor starts loading immediately
 	var file = new File(fileUrl, function(loadedFile, caller) {
-		console.log("File loaded, ready=" + loadedFile.ready + ", failure=" + loadedFile.failure);
+		enyo.log("File loaded, ready=" + loadedFile.ready + ", failure=" + loadedFile.failure);
 
 		if (loadedFile.failure || !loadedFile.ready) {
 			callback(null, "Failed to read file: " + filePath);
 			return;
 		}
 
-		console.log("File loaded, size: " + loadedFile.getLength() + " bytes");
+		ping("Reading file..."); // file loaded - reset watchdog
+		enyo.log("File loaded, size: " + loadedFile.getLength() + " bytes");
 
 		// Create a ZipFile from the File (File is a ByteReader)
 		var zipFile;
@@ -67,74 +71,157 @@ FileImporter.prototype.importEpub = function(filePath, callback) {
 			return;
 		}
 
-		console.log("ZipFile created, loading EpubReader...");
+		enyo.log("ZipFile created, loading EpubReader...");
 
 		// Create the EpubReader to parse the ePub
 		new EpubReader(zipFile, function(zip, reader) {
-			console.log("EpubReader callback, reader=" + (reader ? "valid" : "null"));
+			enyo.log("EpubReader callback, reader=" + (reader ? "valid" : "null"));
 
 			if (reader == null) {
 				callback(null, "Failed to parse ePub. The file may be corrupted, invalid, or DRM protected.");
 				return;
 			}
 
+			ping("Parsing ePub..."); // epub parsed - reset watchdog
+
 			// Extract metadata
 			var metadata = reader.getMetadata() || {};
 			var bookName = metadata.title || reader.getName() || File.extractBasename(filePath);
 
-			console.log("Book metadata: title=" + metadata.title + ", author=" + metadata.author);
+			enyo.log("Book metadata: title=" + metadata.title + ", author=" + metadata.author);
 
-			// Extract cover image
-			var coverImageData = null;
+			// Extract raw cover data URL, then scale to a 120x180 thumbnail via
+			// canvas before storing.  The raw data URL (potentially several MB)
+			// is only held transiently; only the small thumbnail is persisted.
+			var rawCoverDataUrl = null;
 			try {
-				coverImageData = reader.getCoverImage();
-				if (coverImageData) {
-					console.log("Cover image extracted, length=" + coverImageData.length);
-				} else {
-					console.log("No cover image found");
-				}
+				rawCoverDataUrl = reader.getCoverImage();
 			} catch (e) {
-				console.log("Error extracting cover: " + e);
+				enyo.warn("Error extracting cover: " + e);
 			}
 
-			// Generate a unique database name
+			// Generate a unique database name (needed by both paths below)
 			var dbName = "ereader_" + self.generateUniqueId(filePath);
 
-			// Create the HTMLBook for storage
-			console.log("Creating HTMLBook with dbName: " + dbName);
-			var htmlBook = new HTMLBook(reader, false, dbName, function(book) {
-				console.log("HTMLBook callback, book=" + (book ? "valid" : "null") + ", isReady=" + (book ? book.isReady : "N/A"));
+			var continueWithCover = function(coverImageData) {
+				// Startup heartbeat: keep the UI alive briefly while WebSQL opens, then
+				// let the real HTMLBook chunk progress take over. If chunk progress never
+				// starts, the watchdog should time out instead of spinning forever.
+				var htmlBookStarted = false;
+				var htmlBookHeartbeatTicks = 0;
+				var htmlBookHeartbeat = setInterval(function() {
+					if (htmlBookStarted || htmlBookHeartbeatTicks++ >= 6) {
+						clearInterval(htmlBookHeartbeat);
+						return;
+					}
+					ping("Preparing database...");
+				}, 5000);
 
-				if (!book || !book.isReady) {
-					callback(null, "Failed to process ePub content");
-					return;
-				}
+				var htmlBookProgress = function(phase) {
+					htmlBookStarted = true;
+					clearInterval(htmlBookHeartbeat);
+					ping(phase);
+				};
 
-				// Create BookData from the imported content
-				var bookData = new BookData({
-					asin: self.generateUniqueId(filePath),
-					title: metadata.title || bookName,
-					author: metadata.author || "",
-					publisher: metadata.publisher || "",
-					language: metadata.language || "",
-					bookFilePath: filePath,
-					bookDbName: dbName,
-					coverImagePath: coverImageData || "",  // Store cover as data URL
-					locationsCompleted: 0,
-					locationsTotal: 10000,  // Fixed scale 0-10000 for percentage positions
-					bookByteLength: book.getLength() || 0,  // Store actual byte length separately
-					dateAdded: Date.now(),
-					lastAccessed: Date.now()
+				// Create the HTMLBook for storage
+				enyo.log("Creating HTMLBook with dbName: " + dbName);
+				var htmlBook = new HTMLBook(reader, false, dbName, function(book) {
+					clearInterval(htmlBookHeartbeat);
+					enyo.log("HTMLBook callback, book=" + (book ? "valid" : "null") + ", isReady=" + (book ? book.isReady : "N/A"));
+
+					if (!book || !book.isReady) {
+						callback(null, "Failed to process ePub content");
+						return;
+					}
+
+					// Create BookData from the imported content
+					var bookData = new BookData({
+						asin: self.generateUniqueId(filePath),
+						title: metadata.title || bookName,
+						author: metadata.author || "",
+						publisher: metadata.publisher || "",
+						language: metadata.language || "",
+						bookFilePath: filePath,
+						bookDbName: dbName,
+						coverImagePath: coverImageData || "",  // Store thumbnail data URL
+						locationsCompleted: 0,
+						locationsTotal: 10000,  // Fixed scale 0-10000 for percentage positions
+						bookByteLength: book.getLength() || 0,
+						dateAdded: Date.now(),
+						lastAccessed: Date.now()
+					});
+
+					// Store metadata for quick access
+					self.saveBookMetadata(bookData);
+
+					enyo.log("Book imported successfully: " + bookData.title);
+					callback(bookData, null);
+				}, htmlBookProgress);  // pass chunk progress through to the UI/watchdog
+			};
+
+			if (rawCoverDataUrl) {
+				ping("Scaling cover...");
+				self.scaleCoverToThumbnail(rawCoverDataUrl, 120, 180, function(thumbnail) {
+					ping("Processing content...");
+					continueWithCover(thumbnail);
 				});
-
-				// Store metadata for quick access
-				self.saveBookMetadata(bookData);
-
-				console.log("Book imported successfully: " + bookData.title);
-				callback(bookData, null);
-			});
+			} else {
+				ping("Processing content...");
+				continueWithCover(null);
+			}
 		}, null);
 	}, self);
+};
+
+/**
+ * Scale a cover image data URL to a small thumbnail using canvas.
+ *
+ * The raw cover from EpubReader can be several MB.  Rather than storing that
+ * in localStorage we draw it into a 120x180 canvas and store only the
+ * resulting JPEG thumbnail (~15KB).  This works for any cover size and avoids
+ * O(n^2) string-building during storage.
+ *
+ * @param {String}   dataUrl  - Full-resolution "data:image/...;base64,..." string
+ * @param {Number}   width    - Target thumbnail width in px
+ * @param {Number}   height   - Target thumbnail height in px
+ * @param {Function} callback - Called with thumbnail data URL, or null on failure
+ */
+FileImporter.prototype.scaleCoverToThumbnail = function(dataUrl, width, height, callback) {
+	var img = new Image();
+
+	img.onload = function() {
+		try {
+			var canvas = document.createElement("canvas");
+			canvas.width = width;
+			canvas.height = height;
+			var ctx = canvas.getContext("2d");
+
+			// Scale cover to fill the target rect, cropping to center (no letterboxing).
+			// Math.max ensures the image covers the full canvas in both dimensions;
+			// the excess is clipped. This prevents white bars on covers that are not
+			// exactly 2:3, which would make the frame appear wider than the cover art.
+			var scale = Math.max(width / img.width, height / img.height);
+			var drawW = Math.round(img.width * scale);
+			var drawH = Math.round(img.height * scale);
+			var drawX = Math.round((width - drawW) / 2);
+			var drawY = Math.round((height - drawH) / 2);
+			ctx.drawImage(img, drawX, drawY, drawW, drawH);
+
+			var thumbnail = canvas.toDataURL("image/jpeg", 0.75);
+			enyo.log("Cover thumbnail: " + thumbnail.length + " bytes (was " + dataUrl.length + ")");
+			callback(thumbnail);
+		} catch (e) {
+			enyo.warn("Canvas cover scaling failed: " + e);
+			callback(null);
+		}
+	};
+
+	img.onerror = function() {
+		enyo.warn("Cover image failed to load for scaling");
+		callback(null);
+	};
+
+	img.src = dataUrl;
 };
 
 /**

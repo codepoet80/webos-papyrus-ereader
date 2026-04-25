@@ -62,8 +62,9 @@ enyo.kind({
 			{kind: "Button", content: $L("OK"), className: "enyo-button-dark", onclick: "dismissErr"}
 		]},
 
-		// Spinner popup for loading with progress text
-		{name: "spinnerPopup", kind: "Popup", className: "spinner-popup", lazy: false, dismissWithClick: false, modal: true, scrim: true, components: [
+		// Spinner popup for loading with progress text. Keep it non-modal: on
+		// webOS 3, a modal/scrim popup can delay WebSQL work until it closes.
+		{name: "spinnerPopup", kind: "Popup", className: "spinner-popup", lazy: false, dismissWithClick: false, modal: false, scrim: false, components: [
 			{kind: "VFlexBox", align: "center", components: [
 				{kind: "Spinner", name: "importSpinner", showing: true},
 				{name: "spinnerText", content: "Loading...", style: "color: white; margin-top: 10px; font-size: 16px;"}
@@ -156,7 +157,7 @@ enyo.kind({
 				var book = library[i];
 				// If locationsTotal > 10000, it's using the old byte-length scale
 				if (book.locationsTotal && book.locationsTotal > 10000) {
-					console.log("Migrating book '" + book.title + "': locationsTotal " + book.locationsTotal + " -> 10000");
+					enyo.log("Migrating book '" + book.title + "': locationsTotal " + book.locationsTotal + " -> 10000");
 					// Convert locationsCompleted from byte position to 0-10000 scale
 					if (book.locationsCompleted && book.locationsCompleted > 0) {
 						var oldPercent = book.locationsCompleted / book.locationsTotal;
@@ -169,10 +170,10 @@ enyo.kind({
 
 			if (migrated) {
 				localStorage.setItem("ereader_library", JSON.stringify(library));
-				console.log("Library migration complete");
+				enyo.log("Library migration complete");
 			}
 		} catch (e) {
-			console.log("Library migration error: " + e);
+			enyo.log("Library migration error: " + e);
 		}
 	},
 
@@ -193,117 +194,6 @@ enyo.kind({
 			this.$.navigator.rebuildView();
 		}
 		this.$.myUpdater.CheckForUpdate("Papyrus eReader");
-	},
-
-	scanForNewBooks: function() {
-		var self = this;
-		var importer = new FileImporter();
-
-		// Known ePub files to check (for testing)
-		var knownFiles = [
-			"/media/internal/ebooks/Accelerando.epub",
-			"/media/internal/ebooks/AnneFrankDiary.epub",
-			"/media/internal/ebooks/CatcherInTheRye.epub",
-			"/media/internal/ebooks/DemonHauntedWorld.epub"
-		];
-
-		// Get existing book paths to avoid re-importing
-		var existingPaths = {};
-		try {
-			var libraryJson = localStorage.getItem("ereader_library");
-			var library = libraryJson ? JSON.parse(libraryJson) : [];
-			for (var i = 0; i < library.length; i++) {
-				if (library[i].bookFilePath) {
-					existingPaths[library[i].bookFilePath] = true;
-				}
-			}
-		} catch (e) {}
-
-		// Filter out already imported files
-		var newFiles = [];
-		for (var i = 0; i < knownFiles.length; i++) {
-			if (!existingPaths[knownFiles[i]]) {
-				newFiles.push(knownFiles[i]);
-			}
-		}
-
-		if (newFiles.length > 0) {
-			self.log("Found " + newFiles.length + " new ePub files to import");
-			self.importMultipleBooks(newFiles);
-		} else {
-			self.log("No new ePub files to import");
-		}
-	},
-
-	// DEBUG: Auto-open first book and page forward for testing
-	debugAutoOpenBook: function() {
-		var self = this;
-		self.log("DEBUG: Auto-opening first book for testing");
-
-		// Get library from localStorage
-		try {
-			var libraryJson = localStorage.getItem("ereader_library");
-			var library = libraryJson ? JSON.parse(libraryJson) : [];
-
-			if (library.length > 0) {
-				// Find a specific book for testing (change this to test different books)
-				var testBookTitle = "Accelerando"; // Test Accelerando
-				var bookIndex = 0;
-				for (var i = 0; i < library.length; i++) {
-					if (library[i].title && library[i].title.indexOf(testBookTitle) !== -1) {
-						bookIndex = i;
-						break;
-					}
-				}
-				var bookData = new BookData(library[bookIndex]);
-				self.log("DEBUG: Opening book: " + bookData.title + " (dbName: " + bookData.bookDbName + ")");
-
-				// Wait a moment for UI to settle, then open
-				setTimeout(function() {
-					self.selectBook(bookData);
-
-					// After book opens, wait for it to be ready, then auto-page
-					setTimeout(function() {
-						self.debugAutoPage(5);
-					}, 3000);
-				}, 1000);
-			} else {
-				self.log("DEBUG: No books in library to auto-open");
-			}
-		} catch (e) {
-			self.log("DEBUG: Error auto-opening book: " + e);
-		}
-	},
-
-	// DEBUG: Auto-page forward N times
-	debugAutoPage: function(count) {
-		var self = this;
-		var pagesAdvanced = 0;
-
-		self.log("DEBUG: Starting auto-page test, will advance " + count + " pages");
-
-		var pageNext = function() {
-			if (pagesAdvanced >= count) {
-				self.log("DEBUG: Auto-page test complete. Advanced " + pagesAdvanced + " pages.");
-				return;
-			}
-
-			pagesAdvanced++;
-			self.log("DEBUG: Advancing to page " + pagesAdvanced + " of " + count);
-
-			// Call nextPage on the reader's body component
-			if (self.$.reader && self.$.reader.$.body && self.$.reader.$.body.$.epubRenderer) {
-				self.$.reader.$.body.$.epubRenderer.nextPage();
-			} else {
-				self.log("DEBUG: Cannot find epubRenderer for paging");
-				return;
-			}
-
-			// Wait between pages
-			setTimeout(pageNext, 500);
-		};
-
-		pageNext();
 	},
 
 	importMultipleBooks: function(filePaths) {
@@ -368,7 +258,11 @@ enyo.kind({
 		if (this.$.importSpinner) {
 			this.$.importSpinner.show();
 		}
-		if (this.$.spinnerPopup) {
+		// Only call openAtCenter() once; subsequent calls just update the text.
+		// Calling openAtCenter() every time re-triggers the open animation,
+		// which resets the visible text instead of updating it.
+		if (this.$.spinnerPopup && !this.spinnerPopupOpen) {
+			this.spinnerPopupOpen = true;
 			this.$.spinnerPopup.openAtCenter();
 		}
 	},
@@ -377,6 +271,7 @@ enyo.kind({
 	 * Hide spinner popup
 	 */
 	hideSpinnerPopup: function() {
+		this.spinnerPopupOpen = false;
 		if (this.$.spinnerPopup) {
 			this.$.spinnerPopup.close();
 		}
@@ -500,7 +395,7 @@ enyo.kind({
 		// Open the book in the reader
 		this.$.reader.openBook(book);
 
-		// Disable screen dimming while reading
+		// Apply the user's screen timeout preference while reading
 		this.disableDim();
 	},
 
@@ -913,22 +808,20 @@ enyo.kind({
 			return;
 		}
 
+		// Keep the screen on for the duration of the import.
+		enyo.windows.setWindowProperties(window, {blockScreenTimeout: true});
+
 		var self = this;
 		var total = filePaths.length;
 		var current = 0;
 		var successCount = 0;
 		var errors = [];
 
-		// Show spinner with progress
-		this.showSpinnerPopup("Importing 1 of " + total + "...");
-
-		function updateProgress() {
-			self.showSpinnerPopup("Importing " + (current + 1) + " of " + total + "...");
-		}
-
 		function importNext() {
 			if (current >= total) {
-				// All done
+				// All done - restore normal screen timeout behavior.
+				enyo.windows.setWindowProperties(window, {blockScreenTimeout: false});
+
 				self.hideSpinnerPopup();
 
 				// Refresh library view
@@ -947,25 +840,83 @@ enyo.kind({
 				return;
 			}
 
-			updateProgress();
-
 			var filePath = filePaths[current];
 			self.log("Importing: " + filePath);
 
 			var importer = new FileImporter();
+			var importCallbackFired = false;
+			var importWatchdog = null;
+			var lastSpinnerUpdate = 0;
+			var lastImportPhase = "";
+			var contentProcessingStarted = false;
+
+			// Progress-aware watchdog: resets every time keepAlive(phase) is called.
+			// DOM updates are throttled to once per second so the browser actually
+			// gets a chance to repaint. Chunks fire faster than frames render on
+			// the TouchPad, so without throttling the user never sees the updates.
+			var keepAlive = function(phase) {
+				if (importCallbackFired) return;
+				lastImportPhase = phase || lastImportPhase;
+				if (lastImportPhase.indexOf("Processing") >= 0 || lastImportPhase.indexOf("Encoding image") >= 0 || lastImportPhase.indexOf("Writing image") >= 0) {
+					contentProcessingStarted = true;
+				}
+				var forceSpinnerUpdate = lastImportPhase.indexOf("Encoding image") >= 0 || lastImportPhase.indexOf("Writing image") >= 0;
+
+				// Throttle DOM updates to once per second regardless of how fast
+				// chunks fire, so each update is visible before the next one.
+				var now = Date.now();
+				var elapsed = now - lastSpinnerUpdate;
+				if (forceSpinnerUpdate || elapsed >= 2000) {
+					lastSpinnerUpdate = now;
+					var msg = "Importing " + (current + 1) + " of " + total;
+					var phaseStr = phase || "";
+					msg += phaseStr ? (": " + phaseStr) : "...";
+					self.showSpinnerPopup(msg);
+				}
+
+				clearTimeout(importWatchdog);
+				var timeoutMs = contentProcessingStarted ? 300000 : 180000;
+				importWatchdog = setTimeout(function() {
+					if (!importCallbackFired) {
+						if (contentProcessingStarted) {
+							self.log("Import watchdog: still processing " + filePath + " (phase: " + (lastImportPhase || "content") + ")");
+							lastSpinnerUpdate = 0;
+							keepAlive(lastImportPhase || "Processing content...");
+							return;
+						}
+						importCallbackFired = true;
+						self.log("Import watchdog: no activity for " + Math.round(timeoutMs / 1000) + "s on " + filePath);
+						errors.push(filePath + ": timed out");
+						current++;
+						enyo.windows.setWindowProperties(window, {blockScreenTimeout: false});
+						self.hideSpinnerPopup();
+						setTimeout(function() {
+							self.showError("Import Error", "Import timed out. The file may be corrupt or too large.");
+						}, 250);
+					}
+				}, timeoutMs);
+			};
+			keepAlive(); // arm the watchdog
+
 			importer.importEpub(filePath, function(book, error) {
+				if (importCallbackFired) return;
+				importCallbackFired = true;
+				clearTimeout(importWatchdog);
+
 				if (error) {
 					self.log("Import error for " + filePath + ": " + error);
 					errors.push(filePath + ": " + error);
+					enyo.windows.addBannerMessage("Import failed: " + filePath.split("/").pop(), "{}", "icon.png");
 				} else if (book) {
 					successCount++;
 					self.log("Imported: " + book.title);
+					enyo.windows.addBannerMessage("Imported: " + book.title, "{}", "icon.png");
 				}
 
 				current++;
 				// Small delay between imports to let UI update
 				setTimeout(importNext, 100);
-			});
+			}, keepAlive);
 		}
 
 		importNext();
@@ -1102,7 +1053,21 @@ enyo.kind({
 	// SCREEN DIMMING
 	// ========================================
 
+	isKeepScreenOnReadingEnabled: function() {
+		try {
+			var settings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
+			return settings.keepScreenOnReading === true;
+		} catch (e) {
+			this.log("Error reading screen timeout setting: " + e);
+			return false;
+		}
+	},
+
 	disableDim: function() {
+		if (!this.isKeepScreenOnReadingEnabled()) {
+			this.enableDim();
+			return;
+		}
 		if (window.PalmSystem && this.$.DimService) {
 			try {
 				this.$.DimService.call({blockScreenTimeout: true});
