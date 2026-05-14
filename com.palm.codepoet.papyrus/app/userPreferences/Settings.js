@@ -79,11 +79,11 @@ enyo.kind({
 					]},
 					{kind: "RowGroup", components: [
 						{content: $L("WebDAV URL"), className: "loginFormDescription"},
-						{kind: "Input", name: "syncUrlInput", hint: "https://server/remote.php/webdav", onchange: "saveSyncUrl"},
+						{kind: "Input", name: "syncUrlInput", hint: "https://server/remote.php/webdav", onchange: "saveSyncUrl", autocorrect:false, spellCheck: false, autoCapitalize: "lowercase", autoComplete: false},
 					]},
 					{kind: "RowGroup", components: [
 						{content: $L("Username"), className: "loginFormDescription"},
-						{kind: "Input", name: "syncUserInput", hint: "username", onchange: "saveSyncUser"},
+						{kind: "Input", name: "syncUserInput", hint: "username", onchange: "saveSyncUser", autocorrect: false, spellCheck: false, autoCapitalize: "lowercase", autoComplete: false},
 					]},
 					{kind: "RowGroup", components: [
 						{content: $L("Password"), className: "loginFormDescription"},

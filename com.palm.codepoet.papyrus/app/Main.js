@@ -48,7 +48,7 @@ enyo.kind({
 		]},
 
 		// Settings popup
-		{kind: "ereader.userPreferences.Settings", name: "settingsPopup"},
+		{kind: "ereader.userPreferences.Settings", name: "settingsPopup", onClose: "handleSettingsClosed"},
 
 		// About popup
 		{name: "aboutPopup", kind: "Popup", scrim: true, lazy: false, className: "aboutBox", style: "padding: 20px; text-align: center;", width: "300px", components: [
@@ -1040,6 +1040,13 @@ enyo.kind({
 	showSettings: function() {
 		if (this.$.settingsPopup) {
 			this.$.settingsPopup.openAtCenter();
+		}
+	},
+
+	handleSettingsClosed: function() {
+		// Re-apply screen timeout in case keepScreenOnReading was toggled while reading
+		if (this.currentBook) {
+			this.disableDim();
 		}
 	},
 

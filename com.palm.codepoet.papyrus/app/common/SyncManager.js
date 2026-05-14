@@ -126,6 +126,10 @@ var PapyrusSyncManager = {
     },
 
     // Test connection using a PROPFIND on the base path. Returns true/false + error string.
+    // Test connection using a GET request — avoids CORS preflight issues that PROPFIND
+    // triggers over HTTPS when Origin is http:// hitting an https:// endpoint.
+    // Retries once on status 0: first HTTPS connection requires a full TLS handshake
+    // that can time out on webOS before the connection is ready; second attempt reuses it.
     testConnection: function(url, user, pass, callback) {
         var base = url || "";
         if (base && base.charAt(base.length - 1) !== '/') base += '/';
@@ -133,23 +137,32 @@ var PapyrusSyncManager = {
             callback(false, "No URL configured");
             return;
         }
-        var xhr = new XMLHttpRequest();
-        xhr.open('PROPFIND', base, true);
-        xhr.setRequestHeader('Authorization', this._basicAuth(user, pass));
-        xhr.setRequestHeader('Origin', 'http://localhost');
-        xhr.setRequestHeader('Depth', '0');
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState !== 4) return;
-            if (xhr.status >= 200 && xhr.status < 400) {
-                callback(true, null);
-            } else if (xhr.status === 401) {
-                callback(false, "Authentication failed");
-            } else if (xhr.status === 0) {
-                callback(false, "Network error (check URL and HTTPS)");
-            } else {
-                callback(false, "HTTP " + xhr.status);
-            }
+        var self = this;
+        var attempt = function(retry) {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', base, true);
+            xhr.setRequestHeader('Authorization', self._basicAuth(user, pass));
+            xhr.setRequestHeader('Origin', 'http://localhost');
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState !== 4) return;
+                if (xhr.status >= 200 && xhr.status < 400) {
+                    callback(true, null);
+                } else if (xhr.status === 401) {
+                    callback(false, "Authentication failed");
+                } else if (xhr.status === 403) {
+                    callback(false, "Access denied");
+                } else if (xhr.status === 0) {
+                    if (retry) {
+                        setTimeout(function() { attempt(false); }, 1500);
+                    } else {
+                        callback(false, "Cannot reach server (SSL cert or network error)");
+                    }
+                } else {
+                    callback(false, "HTTP " + xhr.status);
+                }
+            };
+            xhr.send();
         };
-        xhr.send();
+        attempt(true);
     }
 };
