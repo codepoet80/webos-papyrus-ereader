@@ -175,9 +175,9 @@ enyo.kind({
 
 	saveAndClose: function() {
 		// Flush text input values before closing (onchange may not fire if OK tapped immediately)
-		this.saveSettings("syncUrl",  this.$.syncUrlInput.getValue());
-		this.saveSettings("syncUser", this.$.syncUserInput.getValue());
-		this.saveSettings("syncPass", this.$.syncPassInput.getValue());
+		this.saveSettings("syncUrl",  this.$.syncUrlInput.getValue().trim());
+		this.saveSettings("syncUser", this.$.syncUserInput.getValue().trim());
+		this.saveSettings("syncPass", this.$.syncPassInput.getValue().trim());
 		this.close();
 	},
 
@@ -186,7 +186,7 @@ enyo.kind({
 	},
 
 	saveSyncUrl: function() {
-		this.saveSettings("syncUrl", this.$.syncUrlInput.getValue());
+		this.saveSettings("syncUrl", this.$.syncUrlInput.getValue().trim());
 	},
 
 	saveSyncUser: function() {

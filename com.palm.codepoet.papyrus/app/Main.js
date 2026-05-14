@@ -1000,19 +1000,24 @@ enyo.kind({
 
 		var self = this;
 		var localPos = this.currentBook.locationsCompleted || 0;
+		this.log("Sync: manual sync started, local position=" + localPos);
 
 		PapyrusSyncManager.pushPosition(this.currentBook.title, this.currentBook.author, localPos);
 
 		PapyrusSyncManager.pullPosition(this.currentBook.title, this.currentBook.author, function(remote) {
 			if (!remote) {
+				self.log("Sync: manual pull got no data");
 				self.showSyncStatus("Could not reach sync server.");
 				return;
 			}
+			self.log("Sync: manual pull remote position=" + remote.position + " local=" + localPos);
 			if (remote.position > localPos) {
+				self.log("Sync: jumping to remote position " + remote.position);
 				self.$.reader.goToLocation(remote.position);
-				self.showSyncStatus("Jumped to synced position.");
+				enyo.windows.addBannerMessage("Sync: jumped to " + Math.round(remote.position / 100) + "%", "{}", "icon.png");
 			} else {
-				self.showSyncStatus("Your position is the most recent.");
+				self.log("Sync: local position is most recent");
+				enyo.windows.addBannerMessage("Sync: your position is up to date", "{}", "icon.png");
 			}
 		});
 	},

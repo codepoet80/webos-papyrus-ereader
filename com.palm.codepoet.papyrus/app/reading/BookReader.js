@@ -232,13 +232,23 @@ enyo.kind({
 		if (!this.bookData) return;
 		var self = this;
 		var localPos = this.bookData.locationsCompleted || 0;
+		this.log("Sync: auto-pull on book open, local position=" + localPos);
 		PapyrusSyncManager.pullPosition(this.bookData.title, this.bookData.author, function(remote) {
-			if (!remote || typeof remote.position !== 'number') return;
+			if (!remote || typeof remote.position !== 'number') {
+				self.log("Sync: auto-pull got no data, staying at local position");
+				return;
+			}
+			self.log("Sync: auto-pull remote position=" + remote.position + " local=" + localPos);
 			if (remote.position > localPos) {
-				self.log("Sync: jumping to remote position " + remote.position + " (local was " + localPos + ")");
+				self.log("Sync: jumping to remote position " + remote.position);
 				self.$.body.goToLocation(remote.position);
+				enyo.windows.addBannerMessage("Sync: resumed at " + Math.round(remote.position / 100) + "%", "{}", "icon.png");
+			} else {
+				self.log("Sync: local position is current, no jump needed");
+				enyo.windows.addBannerMessage("Sync: position is up to date", "{}", "icon.png");
 			}
 			if (remote.bookmarks && remote.bookmarks.length > 0) {
+				self.log("Sync: merging " + remote.bookmarks.length + " remote bookmark(s)");
 				self.mergeRemoteBookmarks(remote.bookmarks);
 			}
 		});
