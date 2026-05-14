@@ -286,12 +286,13 @@ enyo.kind({
 
 	findPageAnnotations: function() {
 		this.$.noteIndicatorBox.show();
-		// Filter annotations for current page position
 		var pageAnnotations = this.annotations.filter(enyo.bind(this, function(a) {
-			return a.contentIdentifier === this.currentBook.asin &&
-				   a.isDeleted !== "1" &&
-				   a.start >= this.currentPosStart &&
-				   a.start <= this.currentPosEnd;
+			if (a.contentIdentifier !== this.currentBook.asin || a.isDeleted === "1") return false;
+			if (a.start >= this.currentPosStart && a.start <= this.currentPosEnd) return true;
+			// Fallback for synced bookmarks whose byte offsets may differ across devices
+			return typeof a.nearestLocation === 'number' &&
+				   a.nearestLocation >= this.currentLocStart &&
+				   a.nearestLocation <= this.currentLocEnd;
 		}));
 		this.showPageAnnotations(pageAnnotations);
 	},

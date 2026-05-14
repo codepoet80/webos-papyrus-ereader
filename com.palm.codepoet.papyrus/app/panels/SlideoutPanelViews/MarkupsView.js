@@ -19,7 +19,7 @@ enyo.kind({
             ]
         },
         {name: "noMarksIndicator", layoutKind: "HFlexLayout", className: "no-marks-indicator", components: [
-                {content: $L("No Notes and Marks have been created for this book")}
+                {content: $L("No Bookmarks have been created for this book")}
             ]
         },
         {name:"annotationService", kind: "DbService", dbKind: "com.palm.kindle.annotations:1", components:[

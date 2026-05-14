@@ -223,6 +223,85 @@ enyo.kind({
 
 		// Apply the user's screen timeout preference now that reading is active
 		this.applyScreenTimeout(this.isKeepScreenOnEnabled());
+
+		// Pull remote reading position; jump to it if it's further along
+		this.syncPullPosition();
+	},
+
+	syncPullPosition: function() {
+		if (!this.bookData) return;
+		var self = this;
+		var localPos = this.bookData.locationsCompleted || 0;
+		PapyrusSyncManager.pullPosition(this.bookData.title, this.bookData.author, function(remote) {
+			if (!remote || typeof remote.position !== 'number') return;
+			if (remote.position > localPos) {
+				self.log("Sync: jumping to remote position " + remote.position + " (local was " + localPos + ")");
+				self.$.body.goToLocation(remote.position);
+			}
+			if (remote.bookmarks && remote.bookmarks.length > 0) {
+				self.mergeRemoteBookmarks(remote.bookmarks);
+			}
+		});
+	},
+
+	getBookmarksForSync: function() {
+		try {
+			var all = JSON.parse(localStorage.getItem("ereader_annotations") || "[]");
+			return all
+				.filter(function(a) {
+					return a.contentIdentifier === this.bookData.asin &&
+					       a.annotationType === "Bookmark" &&
+					       a.isDeleted !== "1";
+				}.bind(this))
+				.map(function(a) {
+					return {
+						annotationId: a.annotationId,
+						nearestLocation: a.nearestLocation,
+						sentenceText: a.sentenceText || "",
+						start: a.start
+					};
+				});
+		} catch(e) {
+			return [];
+		}
+	},
+
+	mergeRemoteBookmarks: function(remoteBookmarks) {
+		try {
+			var all = JSON.parse(localStorage.getItem("ereader_annotations") || "[]");
+			var existingIds = {};
+			all.forEach(function(a) { existingIds[a.annotationId] = true; });
+
+			var added = 0;
+			var asin = this.bookData.asin;
+			remoteBookmarks.forEach(function(rb) {
+				if (!existingIds[rb.annotationId]) {
+					all.push({
+						annotationId: rb.annotationId,
+						annotationType: "Bookmark",
+						contentIdentifier: asin,
+						nearestLocation: rb.nearestLocation || 0,
+						sentenceText: rb.sentenceText || "",
+						start: rb.start || rb.nearestLocation || 0,
+						end: rb.start || rb.nearestLocation || 0,
+						pagePosition: 0,
+						isDeleted: "0"
+					});
+					added++;
+				}
+			});
+
+			if (added > 0) {
+				localStorage.setItem("ereader_annotations", JSON.stringify(all));
+				this.log("Sync: merged " + added + " remote bookmark(s)");
+				// Refresh body's annotation cache and re-check the current page
+				// so the dog-ear reflects any bookmarks on the current page
+				this.$.body.loadAnnotationsFromStorage();
+				this.$.body.findPageAnnotations();
+			}
+		} catch(e) {
+			this.log("BookReader: Error merging remote bookmarks: " + e);
+		}
 	},
 
 	handlePluginStarted: function() {
@@ -358,6 +437,9 @@ enyo.kind({
 				}
 				localStorage.setItem("ereader_library", JSON.stringify(library));
 			} catch (e) {}
+
+			// Push to WebDAV sync (fire and forget)
+			PapyrusSyncManager.pushPosition(this.bookData.title, this.bookData.author, this.currentLocStart, this.getBookmarksForSync());
 		}
 	},
 

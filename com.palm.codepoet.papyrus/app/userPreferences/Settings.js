@@ -10,11 +10,11 @@ enyo.kind({
 	lazy: false,
 	className: "settingsBox",
 	width: "400px",
-	style: "padding: 20px; height: 450px;",
+	style: "padding: 20px; height: 560px;",
 	components: [
 		{kind: "VFlexBox", style: "height: 100%;", components: [
 			{content: $L("Settings"), className: "loginFormTitle"},
-			{kind: "Scroller", style: "height: 340px;", components: [
+			{kind: "Scroller", style: "height: 450px;", components: [
 				{kind: "VFlexBox", components: [
 					{kind: "RowGroup", components: [
 						{kind: "HFlexBox", components: [
@@ -69,10 +69,36 @@ enyo.kind({
 					{kind: "RowGroup", style: "margin-top: 20px;", components: [
 						{kind: "Button", content: $L("Clear Library"), className: "enyo-button-negative", onclick: "confirmClearLibrary"},
 					]},
+					{content: $L("Sync"), className: "loginFormTitle", style: "margin-top: 20px; font-size: 16px;"},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{content: $L("Sync reading position"), flex: 1},
+							{kind: "ToggleButton", name: "syncEnabledBtn", state: false, onChange: "saveSyncEnabled"},
+						]},
+						{content: $L("Syncs your furthest read position via WebDAV"), className: "loginFormDescription"},
+					]},
+					{kind: "RowGroup", components: [
+						{content: $L("WebDAV URL"), className: "loginFormDescription"},
+						{kind: "Input", name: "syncUrlInput", hint: "https://server/remote.php/webdav", onchange: "saveSyncUrl"},
+					]},
+					{kind: "RowGroup", components: [
+						{content: $L("Username"), className: "loginFormDescription"},
+						{kind: "Input", name: "syncUserInput", hint: "username", onchange: "saveSyncUser"},
+					]},
+					{kind: "RowGroup", components: [
+						{content: $L("Password"), className: "loginFormDescription"},
+						{kind: "PasswordInput", name: "syncPassInput", hint: "password", onchange: "saveSyncPass"},
+					]},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{kind: "Button", flex: 1, content: $L("Test Connection"), onclick: "testSyncConnection"},
+							{name: "syncStatus", content: "", flex: 2, style: "padding: 8px; font-size: 13px;"},
+						]},
+					]},
 				]},
 			]},
 			{kind: "HFlexBox", style: "margin-top: 10px;", components: [
-				{kind: "Button", flex: 1, content: $L("OK"), className: "enyo-button-dark", onclick: "close"}
+				{kind: "Button", flex: 1, content: $L("OK"), className: "enyo-button-dark", onclick: "saveAndClose"}
 			]},
 		]},
 		{kind: "Popup", name: "confirmPopup", scrim: true, components: [
@@ -103,6 +129,11 @@ enyo.kind({
 			this.$.fontSizeSelector.setValue(settings.currentFontSize || 18);
 			this.$.volumeKeysBtn.setState(settings.volumeKeyPageTurn || false);
 			this.$.keepScreenOnBtn.setState(settings.keepScreenOnReading || false);
+			this.$.syncEnabledBtn.setState(settings.syncEnabled || false);
+			this.$.syncUrlInput.setValue(settings.syncUrl || "");
+			this.$.syncUserInput.setValue(settings.syncUser || "");
+			this.$.syncPassInput.setValue(settings.syncPass || "");
+			this.$.syncStatus.setContent("");
 		} catch (e) {
 			this.log("Error loading settings: " + e);
 		}
@@ -140,6 +171,41 @@ enyo.kind({
 
 	saveKeepScreenOnChange: function() {
 		this.saveSettings("keepScreenOnReading", this.$.keepScreenOnBtn.getState());
+	},
+
+	saveAndClose: function() {
+		// Flush text input values before closing (onchange may not fire if OK tapped immediately)
+		this.saveSettings("syncUrl",  this.$.syncUrlInput.getValue());
+		this.saveSettings("syncUser", this.$.syncUserInput.getValue());
+		this.saveSettings("syncPass", this.$.syncPassInput.getValue());
+		this.close();
+	},
+
+	saveSyncEnabled: function() {
+		this.saveSettings("syncEnabled", this.$.syncEnabledBtn.getState());
+	},
+
+	saveSyncUrl: function() {
+		this.saveSettings("syncUrl", this.$.syncUrlInput.getValue());
+	},
+
+	saveSyncUser: function() {
+		this.saveSettings("syncUser", this.$.syncUserInput.getValue());
+	},
+
+	saveSyncPass: function() {
+		this.saveSettings("syncPass", this.$.syncPassInput.getValue());
+	},
+
+	testSyncConnection: function() {
+		var url  = this.$.syncUrlInput.getValue();
+		var user = this.$.syncUserInput.getValue();
+		var pass = this.$.syncPassInput.getValue();
+		this.$.syncStatus.setContent("Testing...");
+		var self = this;
+		PapyrusSyncManager.testConnection(url, user, pass, function(ok, err) {
+			self.$.syncStatus.setContent(ok ? "Connected!" : ("Failed: " + (err || "unknown error")));
+		});
 	},
 
 	confirmClearLibrary: function() {

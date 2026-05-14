@@ -37,8 +37,14 @@ enyo.kind({
 		// Application menu
 		{kind: "AppMenu", name: "appMenu", lazy: false, components: [
 			{caption: $L("Import ePub"), onclick: "showFilePicker"},
+			{caption: $L("Sync Now"), onclick: "syncNow"},
 			{caption: $L("Settings"), onclick: "showSettings"},
 			{caption: $L("About"), onclick: "showAbout"}
+		]},
+
+		{name: "syncStatusPopup", kind: "Popup", scrim: true, lazy: false, style: "padding: 20px; text-align: center; width: 300px;", components: [
+			{name: "syncStatusText", content: "", style: "margin-bottom: 15px; word-wrap: break-word;"},
+			{kind: "Button", content: $L("OK"), className: "enyo-button-dark", onclick: "closeSyncStatus"}
 		]},
 
 		// Settings popup
@@ -968,8 +974,8 @@ enyo.kind({
 
 	handleMarkupsResultSelected: function(inSender, result) {
 		this.closeToaster();
-		if (this.$.reader && result && result.position) {
-			this.$.reader.goToPosition(result.position);
+		if (this.$.reader && result && result.location) {
+			this.$.reader.goToLocation(result.location);
 		}
 	},
 
@@ -979,6 +985,45 @@ enyo.kind({
 
 	handleReaderReady: function() {
 		this.log("Reader is ready");
+	},
+
+	syncNow: function() {
+		var settings = PapyrusSyncManager.getSettings();
+		if (!settings.syncEnabled) {
+			this.showSyncStatus("Sync is not enabled.\nEnable it in Settings.");
+			return;
+		}
+		if (!this.currentBook) {
+			this.showSyncStatus("Open a book to sync your position.");
+			return;
+		}
+
+		var self = this;
+		var localPos = this.currentBook.locationsCompleted || 0;
+
+		PapyrusSyncManager.pushPosition(this.currentBook.title, this.currentBook.author, localPos);
+
+		PapyrusSyncManager.pullPosition(this.currentBook.title, this.currentBook.author, function(remote) {
+			if (!remote) {
+				self.showSyncStatus("Could not reach sync server.");
+				return;
+			}
+			if (remote.position > localPos) {
+				self.$.reader.goToLocation(remote.position);
+				self.showSyncStatus("Jumped to synced position.");
+			} else {
+				self.showSyncStatus("Your position is the most recent.");
+			}
+		});
+	},
+
+	showSyncStatus: function(message) {
+		this.$.syncStatusText.setContent(message);
+		this.$.syncStatusPopup.openAtCenter();
+	},
+
+	closeSyncStatus: function() {
+		this.$.syncStatusPopup.close();
 	},
 
 	handleLocalPositionUpdated: function(inSender, position) {

@@ -191,7 +191,7 @@ enyo.kind({
 });
 
 /**
- * ereader.panels.MarkupsView - Bookmarks, Notes, Highlights
+ * ereader.panels.MarkupsView - Bookmarks list
  */
 enyo.kind({
 	name: "ereader.panels.MarkupsView",
@@ -204,72 +204,100 @@ enyo.kind({
 		book: null
 	},
 	components: [
-		{kind: "Header", content: $L("My Notes & Marks")},
+		{kind: "Header", content: $L("Bookmarks")},
 		{kind: "Scroller", flex: 1, components: [
 			{kind: "VFlexBox", name: "markupsList"}
 		]},
-		{name: "emptyMessage", content: $L("No notes or bookmarks yet."), className: "empty-message", showing: true}
+		{name: "emptyMessage", content: $L("No bookmarks yet. Dog-ear a page to add one."), className: "empty-message", showing: true}
 	],
 
-	markups: [],
+	bookmarks: [],
 
 	bookChanged: function() {
-		this.loadMarkups();
+		this.loadBookmarks();
 	},
 
-	loadMarkups: function() {
-		// Load markups from localStorage
+	loadBookmarks: function() {
 		if (!this.book) {
-			this.markups = [];
+			this.bookmarks = [];
 		} else {
 			try {
-				var allMarkups = JSON.parse(localStorage.getItem("ereader_annotations") || "[]");
-				this.markups = allMarkups.filter(function(m) {
-					return m.contentIdentifier === this.book.asin && m.isDeleted !== "1";
+				var all = JSON.parse(localStorage.getItem("ereader_annotations") || "[]");
+				this.bookmarks = all.filter(function(m) {
+					return m.contentIdentifier === this.book.asin &&
+					       m.annotationType === "Bookmark" &&
+					       m.isDeleted !== "1";
 				}.bind(this));
+				// Sort by location ascending
+				this.bookmarks.sort(function(a, b) {
+					return (a.nearestLocation || 0) - (b.nearestLocation || 0);
+				});
 			} catch (e) {
-				this.markups = [];
+				this.bookmarks = [];
 			}
 		}
-		this.rebuildMarkupsList();
+		this.rebuildList();
 	},
 
-	rebuildMarkupsList: function() {
-		this.$.markupsList.destroyControls();
-		for (var i = 0; i < this.markups.length; i++) {
-			var markup = this.markups[i];
-			var icon = "images/reader-icon-bookmark.png";
-			var text = markup.sentenceText || "";
+	_pct: function(location) {
+		return Math.round((location / 10000) * 100) + "%";
+	},
 
-			if (markup.annotationType === "Note") {
-				icon = "images/reader-icon-note-indicator.png";
-				text = markup.userText || "";
-			} else if (markup.annotationType === "Highlight") {
-				icon = "images/reader-icon-highlight.png";
-			}
+	rebuildList: function() {
+		this.$.markupsList.destroyControls();
+		var hasItems = false;
+
+		// Virtual "last read" entry — always first if position > 0
+		var lastReadPos = this.book && this.book.locationsCompleted || 0;
+		if (lastReadPos > 0) {
+			hasItems = true;
+			this.$.markupsList.createComponent({
+				kind: "Item",
+				className: "markup-item",
+				onclick: "handleLastReadClick",
+				owner: this,
+				location: lastReadPos,
+				components: [{
+					kind: "VFlexBox", components: [
+						{content: $L("Last read position"), className: "markup-text", style: "font-style: italic;"},
+						{content: this._pct(lastReadPos), className: "markup-location"}
+					]
+				}]
+			});
+		}
+
+		// Real bookmarks
+		for (var i = 0; i < this.bookmarks.length; i++) {
+			hasItems = true;
+			var bm = this.bookmarks[i];
+			var snippet = (bm.sentenceText || "").substring(0, 80);
+			if (snippet.length === 80) snippet += "...";
 
 			this.$.markupsList.createComponent({
 				kind: "Item",
 				className: "markup-item",
-				onclick: "handleMarkupClick",
+				onclick: "handleBookmarkClick",
 				owner: this,
-				markup: markup,
-				components: [
-					{kind: "HFlexBox", components: [
-						{kind: "Image", src: icon, className: "markup-icon"},
-						{kind: "VFlexBox", flex: 1, components: [
-							{content: text, className: "markup-text"}
-						]}
-					]}
-				]
+				bookmark: bm,
+				components: [{
+					kind: "VFlexBox", components: [
+						{content: this._pct(bm.nearestLocation || 0), className: "markup-location"},
+						{content: snippet, className: "markup-text"}
+					]
+				}]
 			});
 		}
+
 		this.$.markupsList.render();
-		this.$.emptyMessage.setShowing(this.markups.length === 0);
+		this.$.emptyMessage.setShowing(!hasItems);
 	},
 
-	handleMarkupClick: function(inSender) {
-		this.doMarkupsResultSelected({position: inSender.markup.start});
+	handleLastReadClick: function(inSender) {
+		this.doMarkupsResultSelected({location: inSender.location});
+	},
+
+	handleBookmarkClick: function(inSender) {
+		this.doMarkupsResultSelected({location: inSender.bookmark.nearestLocation});
 	}
 });
 

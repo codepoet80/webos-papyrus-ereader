@@ -70,7 +70,7 @@ enyo.kind({
 				this.$.locationPopup.children[1].forceFocus();
 				break;
 			case "markup":
-				this.doSlideOutSelected("markup");
+				this.doSlideOutSelected("markups");
 				break;
 			default:
 				break;
