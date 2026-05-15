@@ -140,8 +140,9 @@
 }
 
 .book-reader-bottom .back-button {
-	-webkit-border-image:none;
-	background-color:transparent;
+	-webkit-border-image: none;
+	border-image: none;
+	background-color: transparent;
 }
 
 .reading-book-title {
@@ -534,8 +535,15 @@
 White
 -----------------*/
 
+/* pop-balloon popups use 9px balloon images, not the 24px enyo-popup default */
+.pop-balloon.enyo-popup {
+	border-width: 9px;
+	border-image: none;
+}
+
 .white.pop-balloon {
 	-webkit-border-image: url(../../images/popup-balloon-bg-white.png) 9 9 9 9;
+	border-image: url(../../images/popup-balloon-bg-white.png) 9 9 9 9 fill stretch;
 }
 .white .balloon-top {
 	background-position: 0 0;
@@ -603,6 +611,7 @@ Sepia
 -----------------*/
 .sepia.pop-balloon {
 	-webkit-border-image: url(../../images/popup-balloon-bg-sepia.png) 9 9 9 9;
+	border-image: url(../../images/popup-balloon-bg-sepia.png) 9 9 9 9 fill stretch;
 }
 .sepia .balloon-top {
 	background-position: 0 -14px;
@@ -668,6 +677,7 @@ Black
 -----------------*/
 .black.pop-balloon {
 	-webkit-border-image: url(../../images/popup-balloon-bg-black.png) 9 9 9 9;
+	border-image: url(../../images/popup-balloon-bg-black.png) 9 9 9 9 fill stretch;
 }
 .black .balloon-top {
 	background-position: 0 -28px;
