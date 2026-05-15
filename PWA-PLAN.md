@@ -25,6 +25,12 @@ from `enyo/enyo.js` instead of the webOS system path. The `launch="nobridge"` we
 attribute was also removed. The app still works identically on the TouchPad; the package
 is ~7MB larger but the framework is now ours to modify.
 
+**TODO — Externalize Enyo:** The `enyo/` directory (~7MB, 981 files) is committed directly
+into the repo, which bloats git history. Long-term, Enyo should live in its own repo
+(a fork of enyo1 with our flex-grow patch applied), published as a release artifact or
+hosted on a CDN, and referenced via `<script src="...">` in `index.html`. That keeps
+this repo lean and makes the Enyo modifications reviewable in isolation.
+
 The rest of `index.html` still needs PWA meta tags added when we do Phase 3
 (see `enyo2-checkmate/index.html` as a template).
 
