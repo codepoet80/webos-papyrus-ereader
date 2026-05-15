@@ -176,12 +176,20 @@
             var self = this;
             this._input = document.createElement('input');
             this._input.type = 'file';
-            this._input.style.display = 'none';
-            this._input.addEventListener('change', function () {
+            // iOS Safari silently drops the selection and never fires 'change'
+            // when the input is display:none. Keep it in the render tree but
+            // visually invisible instead.
+            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;';
+            this._picking = false;
+            var handler = function () {
+                if (!self._picking) return;
+                self._picking = false;
                 var files = Array.prototype.slice.call(self._input.files);
                 if (files.length) self.doPickFile(files);
                 self._input.value = ''; // allow re-selecting the same file
-            });
+            };
+            this._input.addEventListener('change', handler);
+            this._input.addEventListener('input',  handler); // iOS fallback
             document.body.appendChild(this._input);
         },
         destroy: function () {
@@ -200,6 +208,7 @@
             this._input.multiple = !!(opts.allowMultiSelect || this.allowMultiSelect);
             var types = opts.fileType || this.fileType || [];
             this._input.accept = (types.indexOf('document') >= 0) ? '.epub,.pdf' : '.epub';
+            this._picking = true;
             this._input.click();
         }
     });
