@@ -18,7 +18,7 @@ enyo.kind({
 		{name: "libraryPanel", width: "320px", className: "library-panel", kind: "SlidingView", components: [
 			{kind: "ereader.LibraryNavigator", name: "libraryView", flex: 1, onCategorySelected: "handleLibraryViewCatChange", onPanelBtnClicked: "slideBtnClicked", onImportBook: "doImportBook"}
 		]},
-		{name: "contentPanel", peekWidth: 64, width: "704px", fixedWidth: true, dragAnywhere: false, className: "content-panel", kind: "SlidingView", components: [
+		{name: "contentPanel", peekWidth: 64, flex: 1, dragAnywhere: false, className: "content-panel", kind: "SlidingView", components: [
 			{kind: "ereader.ContentNavigator", flex: 1, name: "itemView", onBookSelected: "doBookSelected", onSearchQueried: "onSearchQueried", onMarkupSelected: "onMarkupSelected", onCategorySelected: "handleContentViewCatChange", onAddCategorySelected: "handleAddCategorySelected"},
 			{className: "drag-handle", onclick: "slideBtnClicked", name: "slideBtn"}
 		]}

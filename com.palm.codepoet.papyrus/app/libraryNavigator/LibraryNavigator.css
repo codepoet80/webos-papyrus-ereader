@@ -113,6 +113,15 @@ a { text-decoration: none;}
 	overflow: hidden;
 }
 
+@media (max-width: 1023px) {
+	.import-button-container {
+		display: none;
+	}
+	.all-books-collection {
+		margin-left: 64px;
+	}
+}
+
 .collection-menu-popup {
 	border-color: #cecac3 #b8b5ac #62625a #bfbcb3;
 	padding: 5px 10px;

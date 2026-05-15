@@ -46,6 +46,18 @@ enyo.kind({
 		this.calculateGridColumns();
 	},
 
+	rendered: function() {
+		this.inherited(arguments);
+		// Block mouse-wheel scrolling on the library — wheel events sent the
+		// grid off-screen with no obvious way to scroll back. Touch/drag scroll
+		// still works for users with large libraries.
+		var prevent = function(e) { e.preventDefault(); };
+		var gridNode = this.$.gridScroller.hasNode();
+		var listNode = this.$.listScroller.hasNode();
+		if (gridNode) gridNode.addEventListener('wheel', prevent, { passive: false });
+		if (listNode) listNode.addEventListener('wheel', prevent, { passive: false });
+	},
+
 	calculateGridColumns: function() {
 		// Use actual container width if available; fall back to 684px (704px panel - 20px padding)
 		var width = 684;

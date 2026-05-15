@@ -17,9 +17,6 @@ enyo.kind({
 		{kind: "HFlexBox", name: "libraryHeader", className: "library-header", components: [
 			{kind: "Button", name: "libraryBtn", className: "library-button", onclick: "doPanelBtnClicked", components: [
 				{content: $L("Library"), name: "libraryTitle", className: "panel-header library-navigator-title"}
-			]},
-			{kind: "Button", name: "addCategoryBtn", className: "add-cat-button", onclick: "showAddCategory", label: " ", components: [
-				{kind: "Image", src: "images/nav-icon-plus.png", className: "add-cat-button-icon"}
 			]}
 		]},
 		{name: "booksBtn", content: $L("All Books"), onclick: "handleBooksClicked", className: "all-books-collection"},
@@ -232,14 +229,12 @@ enyo.kind({
 	minimize: function() {
 		this.isMinimized = true;
 		this.$.libraryTitle.setContent("");
-		this.$.addCategoryBtn.hide();
 		this.$.importBtn.hide();
 	},
 
 	restore: function() {
 		this.isMinimized = false;
 		this.$.libraryTitle.setContent($L("Library"));
-		this.$.addCategoryBtn.show();
 		this.$.importBtn.show();
 	}
 });

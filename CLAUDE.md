@@ -239,6 +239,17 @@ Remove Enyo's default `border-image` and set explicit `background-color` for pro
 ### 8. Mojo Compatibility
 `src/MojoCompat.js` provides shims for Mojo APIs used by pReader code (Mojo.Controller.errorDialog, etc.).
 
+### 9. SlidingPane Content Panel Width (PWA / Phone Layout)
+Never use `width: calc(100% - 320px) !important` or any CSS `!important` override on `.content-panel`. Enyo manages panel widths via inline styles in `applySingleViewLayout` / `applyMultiViewLayout`, and CSS `!important` overrides break single-view (phone) layouts.
+
+**Correct approach** — use `flex: 1` on the content panel definition, with no `width` or `fixedWidth: true`:
+```javascript
+{name: "contentPanel", peekWidth: 64, flex: 1, dragAnywhere: false, className: "content-panel", kind: "SlidingView", ...}
+```
+In multi-view mode (desktop), `HFlexLayout` + `flex-grow:1` naturally fills space after the 320px library panel. In single-view mode (phone), `applySingleViewLayout` overrides to `width: 100%`. Enyo also calls `calcFitWidth()` to correctly size the inner content area for both modes. No CSS width override needed.
+
+Do not set a custom `multiViewMinWidth` — the default (500px) correctly puts phones in single-view and desktops in multi-view. Keep `selectContentView` condition as `window.innerWidth < window.innerHeight`.
+
 ---
 
 ## Implementation Status
