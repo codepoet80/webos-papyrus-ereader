@@ -62,6 +62,10 @@ enyo.kind({
 		this.isMinimized = false;
 		this.$.categoryMenu.removeClass("enyo-popup");
 		this.$.libraryBtn.removeClass("enyo-button");
+		if (!window.PalmSystem) {
+			// Shift icon + title right to clear the floating menu button
+			this.$.libraryBtn.applyStyle("margin-left", "52px");
+		}
 		this.loadCategories();
 	},
 

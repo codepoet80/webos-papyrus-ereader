@@ -36,6 +36,9 @@ enyo.kind({
 	
 	create: function() {
 		this.inherited(arguments);
+		if (!window.PalmSystem) {
+			this.$.brightnessContainer.hide();
+		}
 	},
 	
 	handleSearchQueried : function(insender, searchText) {
@@ -64,7 +67,9 @@ enyo.kind({
 	},
 	
 	handleSearchDeselected : function() {
-		this.$.brightnessContainer.show();
+		if (window.PalmSystem) {
+			this.$.brightnessContainer.show();
+		}
 		this.$.fontContainer.show();
 		this.doSearchBoxCollapsed();
 	},

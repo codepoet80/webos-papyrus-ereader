@@ -1,0 +1,33 @@
+{
+  "name": "Papyrus eReader",
+  "short_name": "Papyrus",
+  "description": "ePub reader for webOS and modern browsers",
+  "start_url": "./index.html",
+  "id": "./manifest.json",
+  "display": "standalone",
+  "orientation": "landscape",
+  "theme_color": "#2c1a0e",
+  "background_color": "#2c1a0e",
+  "categories": ["books", "education"],
+  "lang": "en",
+  "icons": [
+    { "src": "icons/16.png",  "sizes": "16x16",   "type": "image/png" },
+    { "src": "icons/32.png",  "sizes": "32x32",   "type": "image/png" },
+    { "src": "icons/48.png",  "sizes": "48x48",   "type": "image/png" },
+    { "src": "icons/57.png",  "sizes": "57x57",   "type": "image/png" },
+    { "src": "icons/60.png",  "sizes": "60x60",   "type": "image/png" },
+    { "src": "icons/72.png",  "sizes": "72x72",   "type": "image/png" },
+    { "src": "icons/76.png",  "sizes": "76x76",   "type": "image/png" },
+    { "src": "icons/96.png",  "sizes": "96x96",   "type": "image/png" },
+    { "src": "icons/114.png", "sizes": "114x114", "type": "image/png" },
+    { "src": "icons/120.png", "sizes": "120x120", "type": "image/png" },
+    { "src": "icons/128.png", "sizes": "128x128", "type": "image/png" },
+    { "src": "icons/144.png", "sizes": "144x144", "type": "image/png" },
+    { "src": "icons/152.png", "sizes": "152x152", "type": "image/png" },
+    { "src": "icons/167.png", "sizes": "167x167", "type": "image/png" },
+    { "src": "icons/180.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "icons/192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icons/256.png", "sizes": "256x256", "type": "image/png" },
+    { "src": "icons/512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

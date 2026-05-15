@@ -1,18 +1,68 @@
 <!DOCTYPE html>
 <html>
 <head>
-	<title>E-Reader</title>
-	<script src="/usr/palm/frameworks/enyo/0.10/framework/enyo.js" type="text/javascript" launch="nobridge"></script>
+	<title>Papyrus eReader</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+	<!-- PWA / installability -->
+	<link rel="manifest" href="manifest.json">
+	<meta name="theme-color" content="#2c1a0e">
+	<meta name="mobile-web-app-capable" content="yes">
+
+	<!-- iOS home screen -->
+	<meta name="apple-mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<meta name="apple-mobile-web-app-title" content="Papyrus">
+
+	<!-- Favicon / browser tab icon -->
+	<link rel="icon" type="image/png" sizes="32x32" href="icons/32.png">
+	<link rel="icon" type="image/png" sizes="16x16" href="icons/16.png">
+	<link rel="shortcut icon" href="icons/32.png">
+
+	<!-- Apple touch icons -->
+	<link rel="apple-touch-icon" sizes="57x57"   href="icons/57.png">
+	<link rel="apple-touch-icon" sizes="60x60"   href="icons/60.png">
+	<link rel="apple-touch-icon" sizes="72x72"   href="icons/72.png">
+	<link rel="apple-touch-icon" sizes="76x76"   href="icons/76.png">
+	<link rel="apple-touch-icon" sizes="114x114" href="icons/114.png">
+	<link rel="apple-touch-icon" sizes="120x120" href="icons/120.png">
+	<link rel="apple-touch-icon" sizes="144x144" href="icons/144.png">
+	<link rel="apple-touch-icon" sizes="152x152" href="icons/152.png">
+	<link rel="apple-touch-icon" sizes="167x167" href="icons/167.png">
+	<link rel="apple-touch-icon" sizes="180x180" href="icons/180.png">
+
+	<!-- Content Security Policy: permissive for Enyo 1 + WebSQL + data: cover images -->
+	<meta http-equiv="Content-Security-Policy" content="default-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; img-src 'self' data: blob:; connect-src 'self' http: https:;">
+
+	<link rel="stylesheet" href="enyo/build/enyo-build.css">
+	<script src="enyo/enyo.js" type="text/javascript"></script>
 </head>
 <body>
 <script type="text/javascript">
-	enyo.create({kind: "ereader.Main"}).renderInto(document.body);
+	try {
+		enyo.create({kind: "ereader.Main"}).renderInto(document.body);
+	} catch(e) {
+		document.body.style.cssText = "background:#fff;color:#c00;padding:20px;font:14px monospace";
+		document.body.innerHTML = "<b>App init failed:</b><br>" + e + "<br><pre>" + (e.stack || "") + "</pre>";
+	}
 
 	enyo.applicationRelaunchHandler = function (params) {
 		if (window.EReaderApp) {
 			window.EReaderApp.relaunchHandler(params);
 		}
 	};
+
+	// Service worker registration
+	if ('serviceWorker' in navigator) {
+		window.addEventListener('load', function() {
+			navigator.serviceWorker.register('serviceworker.js').then(function(reg) {
+				console.log('Papyrus: service worker registered, scope=' + reg.scope);
+			}, function(err) {
+				console.log('Papyrus: service worker registration failed: ' + err);
+			});
+		});
+	}
 </script>
 </body>
 </html>

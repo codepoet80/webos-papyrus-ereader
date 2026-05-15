@@ -2,7 +2,7 @@
  * PapyrusSyncManager - Reading position sync via WebDAV
  *
  * Stores per-book position files at {webdavUrl}/.papyrus/{syncKey}.json
- * Uses XHR with Basic auth and Origin override (same technique as webdavclient's davapi.js).
+ * Uses XHR with Basic auth for WebDAV sync.
  * Push happens on book close; pull happens on book open.
  */
 var PapyrusSyncManager = {
@@ -63,7 +63,6 @@ var PapyrusSyncManager = {
         var xhr = new XMLHttpRequest();
         xhr.open('MKCOL', url, true);
         xhr.setRequestHeader('Authorization', this._basicAuth(settings.syncUser, settings.syncPass));
-        xhr.setRequestHeader('Origin', 'http://localhost');
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== 4) return;
             var ok = xhr.status === 201 || xhr.status === 405 || xhr.status === 200;
@@ -104,7 +103,6 @@ var PapyrusSyncManager = {
             xhr.open('PUT', fileUrl, true);
             xhr.setRequestHeader('Authorization', self._basicAuth(settings.syncUser, settings.syncPass));
             xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.setRequestHeader('Origin', 'http://localhost');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== 4) return;
                 console.log("Sync: PUT status=" + xhr.status);
@@ -135,7 +133,6 @@ var PapyrusSyncManager = {
             var xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
             xhr.setRequestHeader('Authorization', auth);
-            xhr.setRequestHeader('Origin', 'http://localhost');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== 4) return;
                 console.log("Sync: GET status=" + xhr.status);
@@ -178,7 +175,6 @@ var PapyrusSyncManager = {
             var xhr = new XMLHttpRequest();
             xhr.open('GET', base, true);
             xhr.setRequestHeader('Authorization', auth);
-            xhr.setRequestHeader('Origin', 'http://localhost');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== 4) return;
                 console.log("Sync: testConnection status=" + xhr.status + (retry ? "" : " (retry)"));

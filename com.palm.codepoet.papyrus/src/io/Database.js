@@ -16,11 +16,8 @@ Database.prototype.init = function(dbname,version,callback) {
 	this.version = version;
 	this.isReady = false;
 	this.callback = callback;
-	if (typeof(version) == "undefined" || version == null) {
-		this.db = openDatabase(dbname);
-	} else {
-		this.db = openDatabase(dbname, version);
-	}
+	// Safari requires all 4 args; our IndexedDB shim ignores extras.
+	this.db = openDatabase(dbname, version || '1.0', dbname, 5 * 1024 * 1024);
 	
 	if (this.db) {
 		var setAutoVac = function(success) {
