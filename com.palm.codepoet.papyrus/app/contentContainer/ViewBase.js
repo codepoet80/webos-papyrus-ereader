@@ -22,14 +22,13 @@ enyo.kind({
 			{kind: "Spacer", flex: 1},
 			{layoutKind: "VFlexLayout", components: [
 				{kind: "Spacer", flex: 1},
-				{layoutKind: "HFlexLayout", name: "emptyCollectionImgBox", showing: false, components: [
+				{layoutKind: "HFlexLayout", name: "emptyCollectionImgBox", components: [
 					{kind: "Spacer", flex: 1},
 					{kind: "Image", src: "images/empty-collection.png", align: "center"},
 					{kind: "Spacer", flex: 1},
 				]},
 				{name: "noBooksMessageTxt", className: "empty-library-text", content: $L("No books in your library")},
-				{className: "empty-library-subtext", content: $L("Press the button to 'Import ePub' files")},
-				{className: "empty-library-subtext", style: "margin-top: 10px;", content: $L("Place ePub files in /media/internal")},
+				{className: "empty-library-subtext", content: $L("Tap 'Import ePub' to add books from your device")},
 				{kind: "Spacer", flex: 1},
 			]},
 			{kind: "Spacer", flex: 1},
