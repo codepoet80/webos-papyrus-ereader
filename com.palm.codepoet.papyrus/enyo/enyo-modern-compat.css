@@ -1,0 +1,30 @@
+/**
+ * enyo-modern-compat.css
+ *
+ * Patches for Enyo 0.10 controls in modern Chrome/WebKit.
+ *
+ * Old WebKit applied border-width to layout even without border-style.
+ * Modern Chrome requires explicit border-style: solid for border-image
+ * elements to reserve their border-width space in the box model.
+ * Also adds unprefixed border-image alongside -webkit-border-image.
+ *
+ * Reusable across any Enyo 0.10 webOS PWA port.
+ * Load this file AFTER enyo-build.css.
+ */
+
+/* Buttons */
+.enyo-button {
+    border-style: solid;
+    border-image: url(build/palm/themes/Onyx/images/button-up.png) 4 4 4 4 stretch stretch;
+}
+
+.enyo-button.enyo-button-down,
+.enyo-button.enyo-button-depressed {
+    border-image: url(build/palm/themes/Onyx/images/button-down.png) 4 4 4 4 stretch stretch;
+}
+
+/* Radio buttons and tab buttons */
+.enyo-radiobutton,
+.enyo-tabbutton {
+    border-style: solid;
+}

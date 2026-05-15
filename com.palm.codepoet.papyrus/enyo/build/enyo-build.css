@@ -413,8 +413,6 @@ html, body, input, button {
 	min-width: 14px;
 	min-height: 20px;
 	-webkit-border-image: url(palm/themes/Onyx/images/button-up.png) 4 4 4 4 stretch stretch;
-	border-image: url(palm/themes/Onyx/images/button-up.png) 4 4 4 4 stretch stretch;
-	border-style: solid;
 	border-width: 4px;
 	border-radius: 5px;
 	margin: 3px;
@@ -539,7 +537,6 @@ html, body, input, button {
 	text-align: center;
 	-webkit-box-sizing: border-box;
 	font-size: 16px;
-	border-style: solid;
 	border-width: 0px 16px;
 	padding: 7px 0 8px 0;
 }
