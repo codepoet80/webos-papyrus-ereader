@@ -48,14 +48,14 @@ enyo.kind({
 	},
 
 	calculateGridColumns: function() {
-		var width = window.innerWidth;
-		if (width > 900) {
-			this.gridColumns = 5;
-		} else if (width > 700) {
-			this.gridColumns = 4;
-		} else {
-			this.gridColumns = 3;
+		// Use actual container width if available; fall back to 684px (704px panel - 20px padding)
+		var width = 684;
+		if (this.hasNode && this.hasNode()) {
+			var w = this.node.offsetWidth;
+			if (w > 0) width = Math.max(200, w - 20);
 		}
+		// Each column needs ~150px (120px cover + 30px margins)
+		this.gridColumns = Math.max(2, Math.min(10, Math.floor(width / 150)));
 	},
 
 	setBooks: function(books) {

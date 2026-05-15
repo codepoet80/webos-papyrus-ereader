@@ -1,5 +1,10 @@
 .kindle-panel {
-	
+
+}
+
+.content-panel {
+	width: calc(100% - 320px) !important;
+	min-width: 704px;
 }
 
 .library-panel .enyo-bg {

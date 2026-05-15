@@ -1,7 +1,9 @@
 .enyo-button-light {
-	border-width:4px;
-	background:none !important;
+	border-width: 4px;
+	border-style: solid;
+	background: none !important;
 	-webkit-border-image: url(../../images/button.png) 4 !important;
+	border-image: url(../../images/button.png) 4 fill stretch !important;
 }
 
 .content-navigator {
@@ -11,7 +13,7 @@
 	border-top-right-radius: 18px;
 	border-bottom-right-radius: 18px;
 	*/
-	padding: 0 20px 0 30px;
+	padding: 0 10px 0 10px;
 }
 .content-header .enyo-button.sort-list-selector {
 	padding: 0;
@@ -32,7 +34,9 @@
 
 .content-header .enyo-radiobutton.enyo-first {
 	-webkit-border-image: url(../../images/radiobutton.png) 0 18 124 18;
-	background:none !important;
+	border-image: url(../../images/radiobutton.png) 0 18 124 18 fill stretch;
+	border-style: solid;
+	background: none !important;
 }
 
 .content-header .enyo-radiobutton.enyo-first.enyo-button-down, 
@@ -143,12 +147,14 @@
 
 .coverBoxLarge {
 	-webkit-border-image: url('../../images/item-cover-background.png') 11 8 8 3 stretch repeat;
+	border-image: url('../../images/item-cover-background.png') 11 8 8 3 stretch repeat;
+	border-style: solid;
 	border-width: 11px 8px 8px 3px;
 	z-index: 3;
 	position: relative;
 	width: 120px;
 	height: 180px;
-	margin: 0 auto;
+	margin: 0;
 }
 
 .archivedBannerLarge {
@@ -366,6 +372,8 @@
 .gridItem {
 	margin: 20px 15px 10px 15px;
 	position: relative;
+	flex: 1 1 0%;
+	min-width: 0;
 }
 
 .bookExcerpt {
