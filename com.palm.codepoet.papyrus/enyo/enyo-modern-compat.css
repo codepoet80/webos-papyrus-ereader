@@ -12,7 +12,7 @@
  * Load this file AFTER enyo-build.css.
  */
 
-/* Buttons */
+/* ── Buttons ─────────────────────────────────────────────────────────── */
 .enyo-button {
     border-style: solid;
     border-image: url(build/palm/themes/Onyx/images/button-up.png) 4 4 4 4 stretch stretch;
@@ -23,8 +23,46 @@
     border-image: url(build/palm/themes/Onyx/images/button-down.png) 4 4 4 4 stretch stretch;
 }
 
-/* Radio buttons and tab buttons */
+/* ── Radio buttons and tab buttons ───────────────────────────────────── */
 .enyo-radiobutton,
 .enyo-tabbutton {
     border-style: solid;
+}
+
+/* ── Toggle buttons ──────────────────────────────────────────────────── */
+.enyo-toggle-button-bar.on {
+    border-style: solid;
+    border-image: url(build/palm/themes/Onyx/images/toggle-button.png) 1 30 97 8 repeat repeat;
+}
+
+.enyo-toggle-button-bar.off {
+    border-style: solid;
+    border-image: url(build/palm/themes/Onyx/images/toggle-button.png) 33 8 65 30 repeat repeat;
+}
+
+.enyo-toggle-button-bar.disabled.on {
+    border-style: solid;
+    border-image: url(build/palm/themes/Onyx/images/toggle-button.png) 65 30 33 8 repeat repeat;
+}
+
+.enyo-toggle-button-bar.disabled.off {
+    border-style: solid;
+    border-image: url(build/palm/themes/Onyx/images/toggle-button.png) 97 8 1 30 repeat repeat;
+}
+
+/* ── Row groups ──────────────────────────────────────────────────────── */
+.enyo-group {
+    border-style: solid;
+    border-image: url(build/palm/themes/Onyx/images/group-unlabeled.png) 14 14 repeat repeat;
+}
+
+.enyo-group.labeled {
+    border-style: solid;
+    border-image: url(build/palm/themes/Onyx/images/group-labeled.png) 36 14 14 14 repeat repeat;
+}
+
+/* ── Popups ──────────────────────────────────────────────────────────── */
+.enyo-popup {
+    border-style: solid;
+    border-image: url(build/palm/themes/Onyx/images/popup.png) 24 24 24 24 stretch stretch;
 }
