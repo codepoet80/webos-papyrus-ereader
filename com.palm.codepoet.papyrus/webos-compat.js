@@ -35,6 +35,15 @@
 
     enyo.log('webos-compat: browser environment detected, installing shims');
 
+    // Enyo 1's animator captured window.webkitRequestAnimationFrame at load time
+    // (removed from Chrome 31+). Without it Enyo fell back to setTimeout(fn, 17).
+    // Patch enyo.requestAnimationFrame directly so all subsequent animations use
+    // proper frame-synchronized RAF instead of interleaved setTimeout callbacks.
+    if (window.requestAnimationFrame) {
+        enyo.requestAnimationFrame = window.requestAnimationFrame.bind(window);
+        enyo.cancelRequestAnimationFrame = (window.cancelAnimationFrame || function(){}).bind(window);
+    }
+
 
     // =========================================================================
     // enyo.windows — screen management and notifications

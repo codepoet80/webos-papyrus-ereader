@@ -3,14 +3,22 @@
 }
 
 .content-panel {
+	min-width: 0;
 }
 
+/* Phone only: prevent modern-browser flex-shrink from squeezing panels */
 @media (max-width: 499px) {
 	.library-panel, .content-panel { flex-shrink: 0; }
 }
 
 .library-panel .enyo-bg {
 	background: #111;
+}
+
+/* Collapse/expand in multi-view when drag handle is clicked */
+.library-panel {
+	flex-shrink: 0;
+	overflow: hidden;
 }
 
 .content-panel .enyo-bg {
