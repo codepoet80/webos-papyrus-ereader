@@ -8,15 +8,40 @@
 var PapyrusSyncManager = {
 
     // Derive a stable, filesystem-safe key from title + author.
-    // The same book on any device produces the same key.
+    // The same book on any device produces the same key even when metadata
+    // quality differs (e.g. webOS has clean OPF metadata; PWA may fall back
+    // to the filename as the title and "Unknown Author" as the author).
+    //
+    // Normalizations applied:
+    //   1. Strip leading articles (the_, a_, an_) from the slug
+    //   2. Strip trailing noise common in filename-derived metadata:
+    //      _epub, _ebook, _unknown_author, _unknown
     makeSyncKey: function(title, author) {
         var raw = ((title || 'unknown') + '_' + (author || 'unknown'))
             .toLowerCase()
             .replace(/[^a-z0-9]/g, '_')
             .replace(/_+/g, '_')
-            .replace(/^_|_$/, '')
-            .substring(0, 80);
-        return raw || 'unknown_book';
+            .replace(/^_|_$/, '');
+
+        // Strip leading article
+        raw = raw.replace(/^(the|a|an)_/, '');
+
+        // Strip trailing noise iteratively (order matters: longer suffixes first)
+        var noiseSuffixes = ['_unknown_author', '_unknown', '_ebook', '_epub'];
+        var changed;
+        do {
+            changed = false;
+            for (var i = 0; i < noiseSuffixes.length; i++) {
+                var suffix = noiseSuffixes[i];
+                if (raw.length > suffix.length && raw.slice(-suffix.length) === suffix) {
+                    raw = raw.slice(0, -suffix.length);
+                    changed = true;
+                    break;
+                }
+            }
+        } while (changed);
+
+        return (raw.substring(0, 80)) || 'unknown_book';
     },
 
     getSettings: function() {

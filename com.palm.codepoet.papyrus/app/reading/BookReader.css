@@ -133,6 +133,8 @@
 }
 .book-reader-bottom {
 	margin: 0 50px;
+	-webkit-box-align: center;
+	align-items: center;
 }
 .book-reader-bottom .enyo-button-icon {
 	margin-left: 5px;
@@ -140,9 +142,12 @@
 }
 
 .book-reader-bottom .back-button {
+	border: none;
 	-webkit-border-image: none;
 	border-image: none;
 	background-color: transparent;
+	position: relative;
+	top: -5px;
 }
 
 .reading-book-title {
