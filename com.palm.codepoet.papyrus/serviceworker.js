@@ -3,7 +3,7 @@
 // every same-origin asset dynamically so the full app is available offline
 // after the first complete load.
 
-const CACHE_NAME = 'papyrus-v22';
+const CACHE_NAME = 'papyrus-v24';
 
 // Critical shell assets — cached at install time so the app can boot offline
 const SHELL_ASSETS = [

@@ -5,6 +5,10 @@
 .content-panel {
 }
 
+@media (max-width: 499px) {
+	.library-panel, .content-panel { flex-shrink: 0; }
+}
+
 .library-panel .enyo-bg {
 	background: #111;
 }

@@ -18,7 +18,7 @@ enyo.kind({
 		{name: "libraryPanel", width: "320px", className: "library-panel", kind: "SlidingView", components: [
 			{kind: "ereader.LibraryNavigator", name: "libraryView", flex: 1, onCategorySelected: "handleLibraryViewCatChange", onPanelBtnClicked: "slideBtnClicked", onImportBook: "doImportBook"}
 		]},
-		{name: "contentPanel", peekWidth: 64, flex: 1, dragAnywhere: false, className: "content-panel", kind: "SlidingView", components: [
+		{name: "contentPanel", peekWidth: 0, flex: 1, dragAnywhere: false, className: "content-panel", kind: "SlidingView", components: [
 			{kind: "ereader.ContentNavigator", flex: 1, name: "itemView", onBookSelected: "doBookSelected", onSearchQueried: "onSearchQueried", onMarkupSelected: "onMarkupSelected", onCategorySelected: "handleContentViewCatChange", onAddCategorySelected: "handleAddCategorySelected"},
 			{className: "drag-handle", onclick: "slideBtnClicked", name: "slideBtn"}
 		]}
@@ -94,7 +94,7 @@ enyo.kind({
 
 	showLandscapeView: function(async) {
 		this.selectLibraryView(async);
-		this.$.slideBtn.hide();
+		this.$.slideBtn.show();
 		this.resizeView();
 	},
 
@@ -125,16 +125,14 @@ enyo.kind({
 	},
 
 	selectContentView: function(async) {
-		if (window.innerWidth < window.innerHeight) {
-			if (async === true) {
-				this.canAnimate = false;
-			}
-			this.selectView(this.$.contentPanel, async);
-			if (async === true) {
-				this.canAnimate = true;
-			}
-			this.$.libraryView.minimize();
+		if (async === true) {
+			this.canAnimate = false;
 		}
+		this.selectView(this.$.contentPanel, async);
+		if (async === true) {
+			this.canAnimate = true;
+		}
+		this.$.libraryView.minimize();
 	},
 
 	handleResize: function(inSender) {

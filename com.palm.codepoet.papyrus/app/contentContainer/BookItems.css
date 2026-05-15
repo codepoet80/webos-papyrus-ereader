@@ -412,6 +412,21 @@
 }
 
 
+@media (max-width: 499px) {
+	.sort-list-selector {
+		display: none;
+	}
+	.library-search-box {
+		display: none;
+	}
+	.content-navigator-title {
+		margin-left: 52px;
+	}
+	.drag-handle {
+		left: 5px;
+	}
+}
+
 .category-selector-group {
 /*	padding: 0px;
 	border-color: #cecac3 #b8b5ac #62625a #bfbcb3;
