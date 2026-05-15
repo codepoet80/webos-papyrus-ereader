@@ -55,8 +55,8 @@ var PapyrusSyncManager = {
         return this._baseUrl(settings) + '.papyrus/' + encodeURIComponent(syncKey) + '.json';
     },
 
-    // MKCOL the papyrus directory. 201 = created, 405 = already exists — both OK.
-    // Always called on every push so URL changes in settings take effect immediately.
+    // MKCOL the .papyrus directory. Only called when PUT returns 409 (first-ever sync).
+    // 201 = created, 405 = already exists — both OK.
     _ensureDirectory: function(settings, callback) {
         var url = this._dirUrl(settings);
         console.log("Sync: MKCOL " + url);
@@ -72,7 +72,22 @@ var PapyrusSyncManager = {
         xhr.send();
     },
 
+    // PUT the position file. Calls callback(status) when done.
+    _doPut: function(settings, fileUrl, payload, callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', fileUrl, true);
+        xhr.setRequestHeader('Authorization', this._basicAuth(settings.syncUser, settings.syncPass));
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== 4) return;
+            console.log("Sync: PUT status=" + xhr.status);
+            if (callback) callback(xhr.status);
+        };
+        xhr.send(payload);
+    },
+
     // Push current position (and optional bookmarks array) to WebDAV. Fire-and-forget.
+    // Tries PUT directly; only falls back to MKCOL+retry if the directory is missing (409).
     pushPosition: function(title, author, position, bookmarks) {
         var settings = this.getSettings();
         if (!settings.syncEnabled || !settings.syncUrl) {
@@ -93,21 +108,22 @@ var PapyrusSyncManager = {
 
         console.log("Sync: push starting for key=" + syncKey + " position=" + position);
 
-        this._ensureDirectory(settings, function(ok) {
-            if (!ok) {
-                console.log("Sync: push aborted, directory unavailable");
-                return;
+        this._doPut(settings, fileUrl, payload, function(status) {
+            if (status === 409) {
+                // Parent collection doesn't exist yet — create it and retry once
+                console.log("Sync: directory missing, attempting MKCOL");
+                self._ensureDirectory(settings, function(ok) {
+                    if (!ok) {
+                        console.log("Sync: push aborted, could not create directory");
+                        return;
+                    }
+                    self._doPut(settings, fileUrl, payload, null);
+                });
+            } else if (status === 0) {
+                console.log("Sync: push failed (network/CORS error)");
+            } else if (status < 200 || status >= 300) {
+                console.log("Sync: push failed with status=" + status);
             }
-            console.log("Sync: PUT " + fileUrl);
-            var xhr = new XMLHttpRequest();
-            xhr.open('PUT', fileUrl, true);
-            xhr.setRequestHeader('Authorization', self._basicAuth(settings.syncUser, settings.syncPass));
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState !== 4) return;
-                console.log("Sync: PUT status=" + xhr.status);
-            };
-            xhr.send(payload);
         });
     },
 
