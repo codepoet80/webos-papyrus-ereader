@@ -587,6 +587,7 @@ enyo.kind({
 	handleWindowRotated: function(orientation) {
 		if (this.pluginReady) {
 			this.clearNotes();
+			this.$.epubRenderer.clearPageCache();
 			this.$.epubRenderer.refreshPage();
 		}
 	},

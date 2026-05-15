@@ -42,12 +42,27 @@ enyo.kind({
 		if (this._onKeyDown) {
 			window.removeEventListener('keydown', this._onKeyDown);
 		}
+		if (this._onResize) {
+			window.removeEventListener('resize', this._onResize);
+		}
+		if (this._resizeTimer) {
+			clearTimeout(this._resizeTimer);
+		}
 		this.inherited(arguments);
 	},
 
 	create: function() {
 		this.inherited(arguments);
 		var self = this;
+		this._onResize = function() {
+			clearTimeout(self._resizeTimer);
+			self._resizeTimer = setTimeout(function() {
+				if (self.pluginReady) {
+					self.$.body.handleWindowRotated();
+				}
+			}, 500);
+		};
+		window.addEventListener('resize', this._onResize);
 		this._onKeyDown = function(e) {
 			if (!self.pluginReady) return;
 			var tag = (e.target || {}).tagName;

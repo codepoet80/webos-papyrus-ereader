@@ -262,8 +262,8 @@
 /* Book Info Popup */
 
 .bookinfo-popup {
-	right: 34px;
-	bottom: 49px;
+	right: 39px;
+	bottom: 64px;
 	min-width: 200px;
 	max-width: 500px;
 }
@@ -292,8 +292,8 @@
 }
 
 .font-popup {
-	right:100px;
-	top: 48px;
+	right: 65px;
+	top: 53px;
 }
 
 .brightness-popup,
@@ -542,6 +542,7 @@ White
 }
 
 .white.pop-balloon {
+	background-color: #ffffff;
 	-webkit-border-image: url(../../images/popup-balloon-bg-white.png) 9 9 9 9;
 	border-image: url(../../images/popup-balloon-bg-white.png) 9 9 9 9 fill stretch;
 }
@@ -610,6 +611,7 @@ White
 Sepia
 -----------------*/
 .sepia.pop-balloon {
+	background-color: #E5DBC6;
 	-webkit-border-image: url(../../images/popup-balloon-bg-sepia.png) 9 9 9 9;
 	border-image: url(../../images/popup-balloon-bg-sepia.png) 9 9 9 9 fill stretch;
 }
@@ -676,6 +678,7 @@ Sepia
 Black
 -----------------*/
 .black.pop-balloon {
+	background-color: #353535;
 	-webkit-border-image: url(../../images/popup-balloon-bg-black.png) 9 9 9 9;
 	border-image: url(../../images/popup-balloon-bg-black.png) 9 9 9 9 fill stretch;
 }
