@@ -272,6 +272,7 @@
             var cancel = document.createElement('button');
             var picked = false;
 
+            overlay.id = 'papyrus-ios-picker-overlay';
             overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99998;background:rgba(0,0,0,0.55);display:-webkit-box;-webkit-box-align:center;-webkit-box-pack:center;display:flex;align-items:center;justify-content:center;';
             panel.style.cssText = 'position:relative;width:280px;min-height:130px;padding:24px;background:#f7efe2;color:#2c1a0e;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.45);font:18px/1.35 sans-serif;text-align:center;';
             panel.innerHTML = '<div style="font-weight:bold;margin-bottom:8px;">Import ePub</div><div>Tap here to choose a book.</div>';
@@ -286,19 +287,30 @@
             cancel.style.cssText = 'position:relative;z-index:3;margin-top:18px;padding:8px 18px;border:0;border-radius:6px;background:#5b4632;color:#fff;font:16px sans-serif;';
 
             function closeOverlay() {
+                if (window.__papyrusIOSPickerOverlay === overlay) {
+                    window.__papyrusIOSPickerOverlay = null;
+                    window.__papyrusCloseIOSPickerOverlay = null;
+                }
                 overlay.style.display = 'none';
+                overlay.style.visibility = 'hidden';
+                overlay.style.opacity = '0';
                 overlay.style.pointerEvents = 'none';
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
                 if (overlay.remove) overlay.remove();
             }
+
+            window.__papyrusIOSPickerOverlay = overlay;
+            window.__papyrusCloseIOSPickerOverlay = closeOverlay;
 
             function handler() {
                 if (picked) return;
                 var files = Array.prototype.slice.call(input.files);
                 if (!files.length) return;
                 picked = true;
+                closeOverlay();
                 setTimeout(closeOverlay, 0);
                 setTimeout(function () {
+                    closeOverlay();
                     self.doPickFile(files);
                 }, 300);
             }

@@ -772,6 +772,9 @@ enyo.kind({
 
 	handleFilePicked: function(inSender, inResponse) {
 		this.log("FilePicker response received");
+		if (window.__papyrusCloseIOSPickerOverlay) {
+			window.__papyrusCloseIOSPickerOverlay();
+		}
 
 		// Browser environment: webos-compat.js FilePicker stub passes File objects directly.
 		// Use duck-typing (.name is a string) instead of instanceof Blob — on some iOS
@@ -853,6 +856,8 @@ enyo.kind({
 		if (!filePaths || filePaths.length === 0) {
 			return;
 		}
+
+		this.dismissIOSPickerOverlay();
 
 		// Keep the screen on for the duration of the import.
 		enyo.windows.setWindowProperties(window, {blockScreenTimeout: true});
@@ -967,6 +972,21 @@ enyo.kind({
 		}
 
 		importNext();
+	},
+
+	dismissIOSPickerOverlay: function() {
+		if (window.__papyrusCloseIOSPickerOverlay) {
+			window.__papyrusCloseIOSPickerOverlay();
+		}
+		var overlay = document.getElementById("papyrus-ios-picker-overlay");
+		if (overlay) {
+			overlay.style.display = "none";
+			overlay.style.visibility = "hidden";
+			overlay.style.opacity = "0";
+			overlay.style.pointerEvents = "none";
+			if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+			if (overlay.remove) overlay.remove();
+		}
 	},
 
 	// Single file import (convenience wrapper)
@@ -1105,7 +1125,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v68)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v70)");
 		this.$.aboutPopup.openAtCenter();
 	},
 
