@@ -13,14 +13,18 @@
  */
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
+/* fill is required so the center slice of the 9-slice image renders as the
+   button's interior background.  Without it, Firefox shows only the 8 border
+   segments and the centre is transparent — giving "borders present but no
+   middle background". */
 .enyo-button {
     border-style: solid;
-    border-image: url(build/palm/themes/Onyx/images/button-up.png) 4 4 4 4 stretch stretch;
+    border-image: url(build/palm/themes/Onyx/images/button-up.png) 4 4 4 4 fill stretch stretch;
 }
 
 .enyo-button.enyo-button-down,
 .enyo-button.enyo-button-depressed {
-    border-image: url(build/palm/themes/Onyx/images/button-down.png) 4 4 4 4 stretch stretch;
+    border-image: url(build/palm/themes/Onyx/images/button-down.png) 4 4 4 4 fill stretch stretch;
 }
 
 /* ── Radio buttons and tab buttons ───────────────────────────────────── */

@@ -39,6 +39,7 @@ The app is fully functional and ready for community testing.
 - Location slider not yet functional
 - Some ePubs with unusual structure may not parse correctly
 - Very large images may cause layout issues in some books
+- **Phone/PWA layout at ~405px is broken** — see Section 11 below for what was tried and what was NOT resolved
 
 ---
 
@@ -261,6 +262,32 @@ In modern browsers, Enyo's `validateViewSizes()` sets the inner `$.client` div t
 ```
 
 Always apply these two rules whenever Enyo 1 SlidingPane panels live inside a modern flexbox container.
+
+### 11. Phone Layout at ~405px — UNRESOLVED (do not re-attempt without fresh approach)
+
+At browser widths ≤499px (single-view / phone mode), the layout breaks: library panel fills the screen and the content panel only shows a 64px sliver on the right. When the user slides the content panel into view it appears "covered by a copy of the left pane."
+
+**What was tried (all in `KindlePanels.js`):**
+- `create()` calls `showPortraitView(true)` at narrow widths to pre-select content panel — in place.
+- `resizeHandler()` override detects multiView flip and calls `showPortraitView`/`showLandscapeView` — in place, with diagnostic `enyo.log`.
+- `isWideLayout()` helper for consistent width detection — in place.
+- `handleWindowRotated` updated to use `isWideLayout()` (irrelevant in browsers; `sendOrientationChange` never fires because both `orientation` and `lastWindowOrientation` are always `undefined` in the browser, so the event is never dispatched).
+
+**What was traced through Enyo source (enyo-build.js):**
+- `SlidingPane.resizeHandler`: `this.getBounds().height && (this.resize(!0), this.inherited(arguments))` — skips everything if pane height is 0.
+- `SlidingPane.resize()`: calls `setMultiView(window.innerWidth > 500)` then `validateViews()`. Does NOT re-select panels — only repositions based on the currently selected view.
+- `applySingleViewLayout()`: zeroes `peekWidth` on all panels, sets `width:100%`, `fixedWidth:true`.
+- `PeekingSlider.calcSlideAfter()`: returns `-contentPeek (-64)` in single-view, which gives 64px peek when library is selected.
+- `validateViewPositions()` → cascades `validateSlide()` from first sibling, applying `translateX` based on `offsetLeft`. Library panel (index 0) is NEVER given a JS transform. Content panel gets `translateX(-offsetLeft)` when selected.
+- `Pane._selectView()` calls `view.resized()` which triggers `broadcastMessage("resize")` → `resizeHandler()` on the view. This fires our override.
+
+**Root cause not identified.** Static code analysis shows the logic should work, but the user consistently sees the library panel selected at 405px. The `resizeHandler` diagnostic log was added but console output was never obtained. Possible causes not ruled out:
+- Service worker cache-first strategy serving stale `KindlePanels.js` despite cache name bump.
+- `SlidingPane.resizeHandler`'s height guard (`getBounds().height`) returning 0 at the time the handler fires, so `resize(!0)` is never called and `this.multiView` never changes.
+- Something in the `Pane.transitionView` / `transitionDone` / `setShowing` sequence resetting the selected view after our logic runs.
+- The "covered by copy of left pane" visual may simply be both panels having the same `library-background.png` — the content panel IS on top (DOM order) but its ContentNavigator shows an empty state that looks identical to the library background.
+
+**Do NOT retry** by adjusting `showPortraitView` or `resizeHandler` calls — two sessions have been spent here with no result. A fresh approach would require: (a) obtaining the `enyo.log` console output to verify whether `resizeHandler` fires and whether `wasMultiView !== this.multiView`, and (b) using browser DevTools to inspect the actual DOM transforms and `this.view.name` at runtime.
 
 ---
 

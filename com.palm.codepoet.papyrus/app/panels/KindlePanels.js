@@ -160,15 +160,32 @@ enyo.kind({
 		this.resizeView();
 	},
 
+	// resizeHandler is the Enyo entry point called on every browser window resize.
+	// SlidingPane.resizeHandler calls this.resize() which toggles this.multiView at
+	// the 500px threshold, but it does NOT re-select panels — the selected panel
+	// stays wherever it was.  Override: after the parent handles layout, detect a
+	// multi-view flip and switch to the appropriate panel automatically so the user
+	// always sees content on narrow screens and the library/content split on wide ones.
+	resizeHandler: function() {
+		var wasMultiView = this.multiView;
+		this.inherited(arguments);  // SlidingPane.resizeHandler: resize() + child broadcast
+		enyo.log("KindlePanels.resizeHandler: wasMultiView=" + wasMultiView + " nowMultiView=" + this.multiView + " innerWidth=" + window.innerWidth);
+		if (this.multiView !== wasMultiView) {
+			if (this.multiView) {
+				this.showLandscapeView(true);
+			} else {
+				this.showPortraitView(true);
+			}
+		}
+	},
+
 	handleWindowRotated: function(orientation) {
-		// webOS passes "up"/"down" for landscape; the browser shim passes no
-		// argument, so fall back to isWideLayout() which uses the SlidingPane
-		// threshold (500px) on desktop and orientation on webOS devices.
+		// webOS only: PalmSystem.screenOrientation changes to "up"/"down" for
+		// landscape.  In browsers this event is NEVER dispatched (sendOrientationChange
+		// checks orientation !== lastOrientation and both are always undefined),
+		// so resizeHandler() above handles all browser resize logic instead.
 		var isLandscape = (orientation == "up" || orientation == "down" || this.isWideLayout());
 
-		// Browser resize events also fire this handler. Only re-select panels
-		// when orientation actually flips; otherwise just reflow the grid so
-		// the user's panel state is preserved across window resizes.
 		if (isLandscape === this._isLandscape) {
 			this.resizeView();
 			return;

@@ -5,7 +5,7 @@
   "start_url": "./index.html",
   "id": "./manifest.json",
   "display": "standalone",
-  "orientation": "landscape",
+  "orientation": "any",
   "theme_color": "#2c1a0e",
   "background_color": "#2c1a0e",
   "categories": ["books", "education"],

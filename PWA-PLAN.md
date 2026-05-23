@@ -187,12 +187,11 @@ CSS rules — this breaks VFlexBox layout, causing books to become un-tappable a
 
 ---
 
-### Phase 6 — WebSQL Future-Proofing (if Firefox support matters)
-1. Evaluate `sql.js` (SQLite WASM) as a drop-in replacement for `Database.js`
-2. Or write a thin IndexedDB adapter behind the same interface
-3. Goal: Firefox support
+## TODO
 
----
+- Buttons look wonky on Firefox
+- Forced landscape orientation on Boox
+- In-book UI shows then hides immediately on Android/Chrome
 
 ## Reference Files
 

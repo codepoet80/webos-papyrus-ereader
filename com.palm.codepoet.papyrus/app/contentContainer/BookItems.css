@@ -17,9 +17,11 @@
 }
 .content-header .enyo-button.sort-list-selector {
 	padding: 0;
-	border-width:4px;
-	background:none !important;
+	border-width: 4px;
+	border-style: solid;
+	background: none !important;
 	-webkit-border-image: url(../../images/button.png) 4 !important;
+	border-image: url(../../images/button.png) 4 fill stretch !important;
 }
 
 .content-header .enyo-radiobutton {
@@ -39,18 +41,23 @@
 	background: none !important;
 }
 
-.content-header .enyo-radiobutton.enyo-first.enyo-button-down, 
+.content-header .enyo-radiobutton.enyo-first.enyo-button-down,
 .content-header .enyo-radiobutton.enyo-first.enyo-button-depressed {
 	-webkit-border-image: url(../../images/radiobutton.png) 40 18 84 18;
+	border-image: url(../../images/radiobutton.png) 40 18 84 18 fill stretch;
 }
 
 .content-header .enyo-radiobutton.enyo-last {
 	-webkit-border-image: url(../../images/radiobutton.png) 80 18 44 18;
+	border-image: url(../../images/radiobutton.png) 80 18 44 18 fill stretch;
+	border-style: solid;
+	background: none !important;
 }
 
-.content-header .enyo-radiobutton.enyo-last.enyo-button-down, 
+.content-header .enyo-radiobutton.enyo-last.enyo-button-down,
 .content-header .enyo-radiobutton.enyo-last.enyo-button-depressed {
 	-webkit-border-image: url(../../images/radiobutton.png) 120 18 4 18;
+	border-image: url(../../images/radiobutton.png) 120 18 4 18 fill stretch;
 }
 
 .content-header .enyo-button-depressed .enyo-button-icon {

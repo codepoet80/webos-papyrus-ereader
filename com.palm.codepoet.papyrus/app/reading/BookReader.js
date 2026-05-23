@@ -493,6 +493,19 @@ enyo.kind({
 	},
 
 	handleMouseDown: function(inSender, inEvent) {
+		// Debounce: on Android Chrome, document.ontouchstart is registered as a
+		// passive listener (Chrome 56+), so iphoneGesture's a.preventDefault()
+		// call is silently ignored.  The browser then fires its own synthetic
+		// mousedown alongside Enyo's, causing this handler to run twice per tap —
+		// once to show overlays and once to hide them.  Two events from the same
+		// physical tap arrive within ~1-5ms; 300ms catches the duplicate while
+		// still allowing normal rapid tapping.
+		var now = Date.now();
+		if (this._lastMouseDownTime !== undefined && (now - this._lastMouseDownTime) < 300) {
+			return;
+		}
+		this._lastMouseDownTime = now;
+
 		// Handle touch/click for page turning
 		// Tap zones: left 30% = prev, right 30% = next, center 40% = overlays
 		var x = inEvent.pageX || inEvent.clientX;
