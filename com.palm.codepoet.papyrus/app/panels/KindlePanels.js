@@ -62,9 +62,26 @@ enyo.kind({
 	],
 	categoryId: "ereader-books-main",
 
+	// Width threshold that matches SlidingPane's multiViewMinWidth.
+	// Above this: multi-view (library + content side by side).
+	// Below this: single-view (one panel at a time, phone style).
+	multiViewThreshold: 500,
+
+	// Returns true when the layout should show both panels side by side.
+	// On webOS: use physical orientation (width > height is reliable on a device).
+	// On desktop browsers: use the SlidingPane width threshold instead, so the
+	// panel-selection logic stays in sync with the SlidingPane's own multi/single
+	// view switching and doesn't flip when the browser window happens to be square.
+	isWideLayout: function() {
+		if (window.PalmSystem) {
+			return window.innerWidth > window.innerHeight;
+		}
+		return window.innerWidth > this.multiViewThreshold;
+	},
+
 	create: function() {
 		this.inherited(arguments);
-		if (window.innerWidth > window.innerHeight) {
+		if (this.isWideLayout()) {
 			this._isLandscape = true;
 			this.showLandscapeView(true);
 		}
@@ -145,8 +162,9 @@ enyo.kind({
 
 	handleWindowRotated: function(orientation) {
 		// webOS passes "up"/"down" for landscape; the browser shim passes no
-		// argument, so fall back to comparing viewport dimensions.
-		var isLandscape = (orientation == "up" || orientation == "down" || window.innerWidth > window.innerHeight);
+		// argument, so fall back to isWideLayout() which uses the SlidingPane
+		// threshold (500px) on desktop and orientation on webOS devices.
+		var isLandscape = (orientation == "up" || orientation == "down" || this.isWideLayout());
 
 		// Browser resize events also fire this handler. Only re-select panels
 		// when orientation actually flips; otherwise just reflow the grid so

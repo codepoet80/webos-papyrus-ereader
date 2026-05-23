@@ -137,11 +137,15 @@
 }
 
 .coverImageLarge {
+	/* -8px top margin pulls the image up into the top border (pages at top of frame).
+	   Height 188px = content area (180px) + 8px to close the gap between the image
+	   bottom and the bottom border, so only the intended 8px border pages show below
+	   the cover (not 8px of library background peeking through first). */
 	margin: -8px 0 -5px 0;
 	width: 120px;
-	height: 180px;
+	height: 188px;
 	max-width: 120px;
-	max-height: 180px;
+	max-height: 188px;
 	object-fit: cover;
 }
 
@@ -369,11 +373,31 @@
 	z-index: 4;
 }
 
+/* Grid container: wrapping flex row so books reflow automatically.
+   Items have a fixed natural size (120px cover + 30px margins = 150px/slot)
+   so gaps are constant regardless of container width.
+   Three display layers for broad compatibility:
+     1. -webkit-box  (WebKit 534 / webOS 3 TouchPad, Chrome ≤20)
+     2. -webkit-flex (WebKit 536, Chrome 21-28)
+     3. flex         (all modern browsers) */
+.grid-container {
+	display: -webkit-box;
+	-webkit-box-orient: horizontal;
+	-webkit-box-lines: multiple;
+	display: -webkit-flex;
+	display: flex;
+	-webkit-flex-wrap: wrap;
+	flex-wrap: wrap;
+	-webkit-align-content: flex-start;
+	align-content: flex-start;
+}
+
 .gridItem {
 	margin: 20px 15px 10px 15px;
 	position: relative;
-	flex: 1 1 0%;
-	min-width: 0;
+	-webkit-box-flex: 0;    /* old WebKit: don't grow */
+	-webkit-flex: 0 0 auto;
+	flex: 0 0 auto;
 }
 
 .bookExcerpt {

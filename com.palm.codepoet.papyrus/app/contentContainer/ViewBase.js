@@ -16,7 +16,7 @@ enyo.kind({
 			{kind: "VFlexBox", name: "listContainer"}
 		]},
 		{kind: "Scroller", flex: 1, name: "gridScroller", components: [
-			{kind: "VFlexBox", name: "gridContainer"}
+			{kind: "Control", name: "gridContainer", className: "grid-container"}
 		]},
 		{name: "noBooksIndicator", layoutKind: "HFlexLayout", showing: false, className: "no-book-box", components: [
 			{kind: "Spacer", flex: 1},
@@ -37,13 +37,11 @@ enyo.kind({
 
 	books: [],
 	itemKind: "ereader.contentContainer.GridViewItem",
-	gridColumns: 4,
 
 	create: function() {
 		this.inherited(arguments);
 		this.books = [];
 		this.itemKind = "ereader.contentContainer.GridViewItem";
-		this.calculateGridColumns();
 	},
 
 	rendered: function() {
@@ -56,17 +54,6 @@ enyo.kind({
 		var listNode = this.$.listScroller.hasNode();
 		if (gridNode) gridNode.addEventListener('wheel', prevent, { passive: false });
 		if (listNode) listNode.addEventListener('wheel', prevent, { passive: false });
-	},
-
-	calculateGridColumns: function() {
-		// Use actual container width if available; fall back to 684px (704px panel - 20px padding)
-		var width = 684;
-		if (this.hasNode && this.hasNode()) {
-			var w = this.node.offsetWidth;
-			if (w > 0) width = Math.max(200, w - 20);
-		}
-		// Each column needs ~150px (120px cover + 30px margins)
-		this.gridColumns = Math.max(2, Math.min(10, Math.floor(width / 150)));
 	},
 
 	setBooks: function(books) {
@@ -104,28 +91,16 @@ enyo.kind({
 
 		this.$.gridContainer.destroyControls();
 
-		var rowCount = Math.ceil(this.books.length / this.gridColumns);
-		for (var row = 0; row < rowCount; row++) {
-			var rowComponents = [];
-			for (var col = 0; col < this.gridColumns; col++) {
-				var bookIndex = row * this.gridColumns + col;
-				if (bookIndex < this.books.length) {
-					rowComponents.push({
-						kind: "ereader.contentContainer.GridViewItem",
-						book: this.books[bookIndex],
-						onclick: "handleGridItemClick",
-						onmousehold: "handleGridItemHold",
-						owner: this,
-						flex: 1
-					});
-				} else {
-					rowComponents.push({kind: "Control", flex: 1});
-				}
-			}
+		// Items are added flat — CSS flex-wrap handles reflowing into rows.
+		// No JavaScript column calculation needed; covers have a fixed natural
+		// size (120px + 30px margins = 150px per slot) and wrap automatically.
+		for (var i = 0; i < this.books.length; i++) {
 			this.$.gridContainer.createComponent({
-				kind: "HFlexBox",
-				className: "grid-row",
-				components: rowComponents
+				kind: "ereader.contentContainer.GridViewItem",
+				book: this.books[i],
+				onclick: "handleGridItemClick",
+				onmousehold: "handleGridItemHold",
+				owner: this
 			});
 		}
 		this.$.gridContainer.render();
@@ -150,7 +125,6 @@ enyo.kind({
 	},
 
 	resize: function() {
-		this.calculateGridColumns();
 		this.rebuildView();
 	},
 
