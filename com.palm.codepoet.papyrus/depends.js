@@ -2,6 +2,11 @@ enyo.depends(
 	// ES5 polyfills for webOS 3.0 (must load first)
 	"src/Polyfills.js",
 
+	// Browser compatibility shims — must load before any app kinds that
+	// reference ApplicationEvents, PalmService, FilePicker, etc.
+	// On a real webOS device this file exits immediately (window.PalmSystem check).
+	"webos-compat.js",
+
 	// Mojo compatibility shim (must load first)
 	"src/MojoCompat.js",
 

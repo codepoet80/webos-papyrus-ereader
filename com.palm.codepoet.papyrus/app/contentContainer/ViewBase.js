@@ -22,14 +22,13 @@ enyo.kind({
 			{kind: "Spacer", flex: 1},
 			{layoutKind: "VFlexLayout", components: [
 				{kind: "Spacer", flex: 1},
-				{layoutKind: "HFlexLayout", name: "emptyCollectionImgBox", showing: false, components: [
+				{layoutKind: "HFlexLayout", name: "emptyCollectionImgBox", components: [
 					{kind: "Spacer", flex: 1},
 					{kind: "Image", src: "images/empty-collection.png", align: "center"},
 					{kind: "Spacer", flex: 1},
 				]},
 				{name: "noBooksMessageTxt", className: "empty-library-text", content: $L("No books in your library")},
-				{className: "empty-library-subtext", content: $L("Press the button to 'Import ePub' files")},
-				{className: "empty-library-subtext", style: "margin-top: 10px;", content: $L("Place ePub files in /media/internal")},
+				{className: "empty-library-subtext", content: $L("Tap 'Import ePub' to add books from your device")},
 				{kind: "Spacer", flex: 1},
 			]},
 			{kind: "Spacer", flex: 1},
@@ -47,15 +46,27 @@ enyo.kind({
 		this.calculateGridColumns();
 	},
 
+	rendered: function() {
+		this.inherited(arguments);
+		// Block mouse-wheel scrolling on the library — wheel events sent the
+		// grid off-screen with no obvious way to scroll back. Touch/drag scroll
+		// still works for users with large libraries.
+		var prevent = function(e) { e.preventDefault(); };
+		var gridNode = this.$.gridScroller.hasNode();
+		var listNode = this.$.listScroller.hasNode();
+		if (gridNode) gridNode.addEventListener('wheel', prevent, { passive: false });
+		if (listNode) listNode.addEventListener('wheel', prevent, { passive: false });
+	},
+
 	calculateGridColumns: function() {
-		var width = window.innerWidth;
-		if (width > 900) {
-			this.gridColumns = 5;
-		} else if (width > 700) {
-			this.gridColumns = 4;
-		} else {
-			this.gridColumns = 3;
+		// Use actual container width if available; fall back to 684px (704px panel - 20px padding)
+		var width = 684;
+		if (this.hasNode && this.hasNode()) {
+			var w = this.node.offsetWidth;
+			if (w > 0) width = Math.max(200, w - 20);
 		}
+		// Each column needs ~150px (120px cover + 30px margins)
+		this.gridColumns = Math.max(2, Math.min(10, Math.floor(width / 150)));
 	},
 
 	setBooks: function(books) {

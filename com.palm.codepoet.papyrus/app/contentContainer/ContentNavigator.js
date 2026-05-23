@@ -32,7 +32,7 @@ enyo.kind({
 					{kind: "RadioButton", icon: "images/menu-icon-list.png", value: "ereader.contentContainer.ListViewItem"}
 				]}
 			]},
-			{kind: "ereader.ExpandingSearchBox", name: "searchBox", onSearchChanged: "handleSearchQueried", onBoxExpanded: "searchExpanded", onBoxCollapsed: "searchCollapsed", style: "margin-left: 10px;"}
+			{kind: "ereader.ExpandingSearchBox", name: "searchBox", className: "library-search-box", onSearchChanged: "handleSearchQueried", onBoxExpanded: "searchExpanded", onBoxCollapsed: "searchCollapsed", style: "margin-left: 10px;"}
 		]},
 		{name: "contentView", flex: 1, kind: "ereader.contentContainer.ViewBase", onBookSelected: "doBookSelected", onItemPressAndHold: "handleItemPressAndHold"},
 		{kind: "ereader.contentContainer.ItemMenuPopup", name: "itemMenu", onBookSelected: "doBookSelected", onBookDeleted: "handleBookDeleted", onAddCategorySelected: "doAddCategorySelected"}

@@ -2,21 +2,46 @@
  * PapyrusSyncManager - Reading position sync via WebDAV
  *
  * Stores per-book position files at {webdavUrl}/.papyrus/{syncKey}.json
- * Uses XHR with Basic auth and Origin override (same technique as webdavclient's davapi.js).
+ * Uses XHR with Basic auth for WebDAV sync.
  * Push happens on book close; pull happens on book open.
  */
 var PapyrusSyncManager = {
 
     // Derive a stable, filesystem-safe key from title + author.
-    // The same book on any device produces the same key.
+    // The same book on any device produces the same key even when metadata
+    // quality differs (e.g. webOS has clean OPF metadata; PWA may fall back
+    // to the filename as the title and "Unknown Author" as the author).
+    //
+    // Normalizations applied:
+    //   1. Strip leading articles (the_, a_, an_) from the slug
+    //   2. Strip trailing noise common in filename-derived metadata:
+    //      _epub, _ebook, _unknown_author, _unknown
     makeSyncKey: function(title, author) {
         var raw = ((title || 'unknown') + '_' + (author || 'unknown'))
             .toLowerCase()
             .replace(/[^a-z0-9]/g, '_')
             .replace(/_+/g, '_')
-            .replace(/^_|_$/, '')
-            .substring(0, 80);
-        return raw || 'unknown_book';
+            .replace(/^_|_$/, '');
+
+        // Strip leading article
+        raw = raw.replace(/^(the|a|an)_/, '');
+
+        // Strip trailing noise iteratively (order matters: longer suffixes first)
+        var noiseSuffixes = ['_unknown_author', '_unknown', '_ebook', '_epub'];
+        var changed;
+        do {
+            changed = false;
+            for (var i = 0; i < noiseSuffixes.length; i++) {
+                var suffix = noiseSuffixes[i];
+                if (raw.length > suffix.length && raw.slice(-suffix.length) === suffix) {
+                    raw = raw.slice(0, -suffix.length);
+                    changed = true;
+                    break;
+                }
+            }
+        } while (changed);
+
+        return (raw.substring(0, 80)) || 'unknown_book';
     },
 
     getSettings: function() {
@@ -55,15 +80,14 @@ var PapyrusSyncManager = {
         return this._baseUrl(settings) + '.papyrus/' + encodeURIComponent(syncKey) + '.json';
     },
 
-    // MKCOL the papyrus directory. 201 = created, 405 = already exists — both OK.
-    // Always called on every push so URL changes in settings take effect immediately.
+    // MKCOL the .papyrus directory. Only called when PUT returns 409 (first-ever sync).
+    // 201 = created, 405 = already exists — both OK.
     _ensureDirectory: function(settings, callback) {
         var url = this._dirUrl(settings);
         console.log("Sync: MKCOL " + url);
         var xhr = new XMLHttpRequest();
         xhr.open('MKCOL', url, true);
         xhr.setRequestHeader('Authorization', this._basicAuth(settings.syncUser, settings.syncPass));
-        xhr.setRequestHeader('Origin', 'http://localhost');
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== 4) return;
             var ok = xhr.status === 201 || xhr.status === 405 || xhr.status === 200;
@@ -73,7 +97,22 @@ var PapyrusSyncManager = {
         xhr.send();
     },
 
+    // PUT the position file. Calls callback(status) when done.
+    _doPut: function(settings, fileUrl, payload, callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.open('PUT', fileUrl, true);
+        xhr.setRequestHeader('Authorization', this._basicAuth(settings.syncUser, settings.syncPass));
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== 4) return;
+            console.log("Sync: PUT status=" + xhr.status);
+            if (callback) callback(xhr.status);
+        };
+        xhr.send(payload);
+    },
+
     // Push current position (and optional bookmarks array) to WebDAV. Fire-and-forget.
+    // Tries PUT directly; only falls back to MKCOL+retry if the directory is missing (409).
     pushPosition: function(title, author, position, bookmarks) {
         var settings = this.getSettings();
         if (!settings.syncEnabled || !settings.syncUrl) {
@@ -94,22 +133,22 @@ var PapyrusSyncManager = {
 
         console.log("Sync: push starting for key=" + syncKey + " position=" + position);
 
-        this._ensureDirectory(settings, function(ok) {
-            if (!ok) {
-                console.log("Sync: push aborted, directory unavailable");
-                return;
+        this._doPut(settings, fileUrl, payload, function(status) {
+            if (status === 409) {
+                // Parent collection doesn't exist yet — create it and retry once
+                console.log("Sync: directory missing, attempting MKCOL");
+                self._ensureDirectory(settings, function(ok) {
+                    if (!ok) {
+                        console.log("Sync: push aborted, could not create directory");
+                        return;
+                    }
+                    self._doPut(settings, fileUrl, payload, null);
+                });
+            } else if (status === 0) {
+                console.log("Sync: push failed (network/CORS error)");
+            } else if (status < 200 || status >= 300) {
+                console.log("Sync: push failed with status=" + status);
             }
-            console.log("Sync: PUT " + fileUrl);
-            var xhr = new XMLHttpRequest();
-            xhr.open('PUT', fileUrl, true);
-            xhr.setRequestHeader('Authorization', self._basicAuth(settings.syncUser, settings.syncPass));
-            xhr.setRequestHeader('Content-Type', 'application/json');
-            xhr.setRequestHeader('Origin', 'http://localhost');
-            xhr.onreadystatechange = function() {
-                if (xhr.readyState !== 4) return;
-                console.log("Sync: PUT status=" + xhr.status);
-            };
-            xhr.send(payload);
         });
     },
 
@@ -135,7 +174,6 @@ var PapyrusSyncManager = {
             var xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
             xhr.setRequestHeader('Authorization', auth);
-            xhr.setRequestHeader('Origin', 'http://localhost');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== 4) return;
                 console.log("Sync: GET status=" + xhr.status);
@@ -178,7 +216,6 @@ var PapyrusSyncManager = {
             var xhr = new XMLHttpRequest();
             xhr.open('GET', base, true);
             xhr.setRequestHeader('Authorization', auth);
-            xhr.setRequestHeader('Origin', 'http://localhost');
             xhr.onreadystatechange = function() {
                 if (xhr.readyState !== 4) return;
                 console.log("Sync: testConnection status=" + xhr.status + (retry ? "" : " (retry)"));

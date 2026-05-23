@@ -751,9 +751,24 @@ enyo.kind({
 	},
 
 	handleFilePicked: function(inSender, inResponse) {
-		this.log("FilePicker response: " + JSON.stringify(inResponse));
+		this.log("FilePicker response received");
 
-		// Collect all file paths from the response
+		// Browser environment: webos-compat.js FilePicker stub passes File objects directly
+		if (Array.isArray(inResponse) && inResponse.length > 0 && inResponse[0] instanceof Blob) {
+			var epubFiles = inResponse.filter(function(f) {
+				return f.name && f.name.toLowerCase().indexOf('.epub') !== -1;
+			});
+			var skipped = inResponse.length - epubFiles.length;
+			if (epubFiles.length > 0) {
+				if (skipped > 0) this.log("Skipped " + skipped + " non-ePub file(s)");
+				this.importMultipleEpubs(epubFiles);
+			} else {
+				this.showError("Import Error", "Please select ePub files only (.epub)");
+			}
+			return;
+		}
+
+		// webOS path: extract file paths from response objects
 		var allPaths = [];
 		if (inResponse) {
 			// FilePicker returns an array of selected files
@@ -847,7 +862,8 @@ enyo.kind({
 			}
 
 			var filePath = filePaths[current];
-			self.log("Importing: " + filePath);
+			var displayName = typeof filePath === 'string' ? filePath : (filePath.name || 'unknown');
+			self.log("Importing: " + displayName);
 
 			var importer = new FileImporter();
 			var importCallbackFired = false;
@@ -885,14 +901,14 @@ enyo.kind({
 				importWatchdog = setTimeout(function() {
 					if (!importCallbackFired) {
 						if (contentProcessingStarted) {
-							self.log("Import watchdog: still processing " + filePath + " (phase: " + (lastImportPhase || "content") + ")");
+							self.log("Import watchdog: still processing " + displayName + " (phase: " + (lastImportPhase || "content") + ")");
 							lastSpinnerUpdate = 0;
 							keepAlive(lastImportPhase || "Processing content...");
 							return;
 						}
 						importCallbackFired = true;
-						self.log("Import watchdog: no activity for " + Math.round(timeoutMs / 1000) + "s on " + filePath);
-						errors.push(filePath + ": timed out");
+						self.log("Import watchdog: no activity for " + Math.round(timeoutMs / 1000) + "s on " + displayName);
+						errors.push(displayName + ": timed out");
 						current++;
 						enyo.windows.setWindowProperties(window, {blockScreenTimeout: false});
 						self.hideSpinnerPopup();
@@ -910,9 +926,9 @@ enyo.kind({
 				clearTimeout(importWatchdog);
 
 				if (error) {
-					self.log("Import error for " + filePath + ": " + error);
-					errors.push(filePath + ": " + error);
-					enyo.windows.addBannerMessage("Import failed: " + filePath.split("/").pop(), "{}", "icon.png");
+					self.log("Import error for " + displayName + ": " + error);
+					errors.push(displayName + ": " + error);
+					enyo.windows.addBannerMessage("Import failed: " + displayName.split("/").pop(), "{}", "icon.png");
 				} else if (book) {
 					successCount++;
 					self.log("Imported: " + book.title);
