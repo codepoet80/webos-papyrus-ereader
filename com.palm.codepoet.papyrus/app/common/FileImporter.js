@@ -379,32 +379,22 @@ FileImporter.SAMPLE_BOOKS = [
 	{ url: 'sample-books/AliceInWonderland-Carroll.epub',   filename: 'AliceInWonderland-Carroll.epub'   },
 	{ url: 'sample-books/HoundOfBaskervilles-Doyle.epub',   filename: 'HoundOfBaskervilles-Doyle.epub'   }
 ];
-FileImporter.SAMPLES_FLAG = 'ereader_samples_installed';
 
 /**
- * Install sample books on first launch.
+ * Install sample books on demand (triggered by "Add Sample Books" menu item).
  *
- * Checks localStorage for SAMPLES_FLAG.  If already set, calls completeCallback
- * immediately (nothing to do).  Otherwise imports each sample book via
- * importEpubFromUrl, calling progressCallback(current, total) for each, then
- * sets the flag and calls completeCallback when finished.
- *
- * Errors on individual books are logged and skipped — a partial install still
- * sets the flag so we don't retry on next launch.
+ * Imports each sample book via importEpubFromUrl, calling
+ * progressCallback(current, total) for each.  Duplicate detection is handled
+ * by importEpubFromUrl (same URL is never added twice), so this is safe to
+ * call multiple times.  Errors on individual books are logged and skipped.
  */
 FileImporter.prototype.installSampleBooks = function(progressCallback, completeCallback) {
-	if (localStorage.getItem(FileImporter.SAMPLES_FLAG)) {
-		completeCallback();
-		return;
-	}
-
 	var self = this;
 	var samples = FileImporter.SAMPLE_BOOKS;
 	var index = 0;
 
 	function importNext() {
 		if (index >= samples.length) {
-			localStorage.setItem(FileImporter.SAMPLES_FLAG, 'true');
 			completeCallback();
 			return;
 		}
@@ -421,7 +411,7 @@ FileImporter.prototype.installSampleBooks = function(progressCallback, completeC
 				enyo.log('Sample book installed: ' + (book ? book.title : sample.filename));
 			}
 			importNext();
-		}, function() {});  // ping is a no-op for silent background install
+		}, function() {});
 	}
 
 	importNext();

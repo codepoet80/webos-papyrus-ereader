@@ -37,6 +37,7 @@ enyo.kind({
 		// Application menu
 		{kind: "AppMenu", name: "appMenu", lazy: false, components: [
 			{caption: $L("Import ePub"), onclick: "showFilePicker"},
+			{caption: $L("Add Sample Books"), onclick: "addSampleBooks"},
 			{caption: $L("Sync Now"), onclick: "syncNow"},
 			{caption: $L("Settings"), onclick: "showSettings"},
 			{caption: $L("About"), onclick: "showAbout"}
@@ -196,37 +197,12 @@ enyo.kind({
 	libraryLoaded: function(library) {
 		this.log("Library loaded with " + library.entries.length + " books");
 
-		var self = this;
-
-		var finishLibraryLoad = function() {
-			if (self.$.navigator) {
-				self.$.navigator.rebuildView();
-			}
-			if (window.PalmSystem) {
-				self.$.myUpdater.CheckForUpdate("Papyrus eReader");
-			}
-		};
-
-		// On first launch, install bundled sample books so users never start
-		// with an empty library.  The flag is set by FileImporter after install
-		// completes and persists across launches.  If a user deletes the sample
-		// books the flag stays set, so they are never re-installed.
-		if (localStorage.getItem(FileImporter.SAMPLES_FLAG)) {
-			finishLibraryLoad();
-			return;
+		if (this.$.navigator) {
+			this.$.navigator.rebuildView();
 		}
-
-		self.showSpinnerPopup("Preparing your library...");
-		var importer = new FileImporter();
-		importer.installSampleBooks(
-			function(current, total) {
-				self.showSpinnerPopup("Adding sample " + current + " of " + total + "...");
-			},
-			function() {
-				self.hideSpinnerPopup();
-				finishLibraryLoad();
-			}
-		);
+		if (window.PalmSystem) {
+			this.$.myUpdater.CheckForUpdate("Papyrus eReader");
+		}
 	},
 
 	importMultipleBooks: function(filePaths) {
@@ -504,6 +480,23 @@ enyo.kind({
 	// ========================================
 	// FILE IMPORT
 	// ========================================
+
+	addSampleBooks: function() {
+		var self = this;
+		var importer = new FileImporter();
+		self.showSpinnerPopup("Adding sample books...");
+		importer.installSampleBooks(
+			function(current, total) {
+				self.showSpinnerPopup("Adding sample " + current + " of " + total + "...");
+			},
+			function() {
+				self.hideSpinnerPopup();
+				if (self.$.navigator) {
+					self.$.navigator.rebuildView();
+				}
+			}
+		);
+	},
 
 	showFilePicker: function() {
 		// Check if filemgr is available (first time only)
