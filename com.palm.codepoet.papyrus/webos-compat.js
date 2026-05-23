@@ -297,10 +297,10 @@
                 var files = Array.prototype.slice.call(input.files);
                 if (!files.length) return;
                 picked = true;
-                closeOverlay();
+                setTimeout(closeOverlay, 0);
                 setTimeout(function () {
                     self.doPickFile(files);
-                }, 150);
+                }, 300);
             }
 
             input.addEventListener('change', handler);
