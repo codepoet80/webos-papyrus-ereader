@@ -1,22 +1,25 @@
 /**
  * enyo-modern-compat.css
  *
- * Patches for Enyo 0.10 controls in modern Chrome/WebKit.
+ * Patches for Enyo 0.10 controls in modern Chrome/WebKit and Firefox.
  *
- * Old WebKit applied border-width to layout even without border-style.
- * Modern Chrome requires explicit border-style: solid for border-image
- * elements to reserve their border-width space in the box model.
- * Also adds unprefixed border-image alongside -webkit-border-image.
+ * Chrome/WebKit: old WebKit applied border-width to layout even without
+ * border-style.  Modern Chrome requires explicit border-style: solid so that
+ * border-width reserves space in the box model.  Also adds unprefixed
+ * border-image alongside -webkit-border-image.
  *
- * Reusable across any Enyo 0.10 webOS PWA port.
+ * Firefox: does not support -webkit-border-image at all.  Needs the standard
+ * border-image property (with fill where a background is required) plus
+ * explicit background-color/gradient on elements whose background was
+ * supplied by the webOS OS compositor rather than CSS.
+ *
+ * Rules that only apply to Firefox are wrapped in
+ * @supports (-moz-appearance: none) — Chrome and Safari ignore that block.
+ *
  * Load this file AFTER enyo-build.css.
  */
 
 /* ── Buttons ─────────────────────────────────────────────────────────── */
-/* fill is required so the center slice of the 9-slice image renders as the
-   button's interior background.  Without it, Firefox shows only the 8 border
-   segments and the centre is transparent — giving "borders present but no
-   middle background". */
 .enyo-button {
     border-style: solid;
     border-image: url(build/palm/themes/Onyx/images/button-up.png) 4 4 4 4 fill stretch stretch;
@@ -65,8 +68,49 @@
     border-image: url(build/palm/themes/Onyx/images/group-labeled.png) 36 14 14 14 repeat repeat;
 }
 
-/* ── Popups ──────────────────────────────────────────────────────────── */
+/* ── Popups — shared ─────────────────────────────────────────────────── */
+/* border-style: solid is required in modern Chrome/WebKit so that
+   border-width: 24px reserves space in the box model, giving the popup
+   its rounded-corner border area and interior padding.                    */
 .enyo-popup {
     border-style: solid;
     border-image: url(build/palm/themes/Onyx/images/popup.png) 24 24 24 24 stretch stretch;
+}
+
+/* ── Firefox-only: popup backgrounds and menus ───────────────────────── */
+/* Chrome renders all popup variants correctly via -webkit-border-image
+   from enyo-build.css.  Firefox needs the standard border-image property,
+   and for elements whose background was provided by the webOS OS compositor
+   (appmenu) an explicit CSS background must be supplied.
+   @supports (-moz-appearance: none) is true only in Firefox.              */
+@supports (-moz-appearance: none) {
+
+    /* Standard popup: add fill so Firefox shows the popup background */
+    .enyo-popup {
+        border-image: url(build/palm/themes/Onyx/images/popup.png) 24 24 24 24 fill stretch stretch;
+    }
+
+    /* Dropdown / list-selector menus */
+    .enyo-popup.enyo-popup-menu {
+        border-style: solid;
+        border-image: url(build/palm/themes/Onyx/images/menu-background.png) 20 20 20 20 fill stretch stretch;
+    }
+
+    /* App menu — appmenu.png is a transparent-centre frame; the dark
+       interior background was provided by the OS compositor on real webOS. */
+    .enyo-popup.enyo-appmenu {
+        border-style: solid;
+        border-image: url(build/palm/themes/Onyx/images/appmenu.png) 12 24 20 24 stretch stretch;
+        background: linear-gradient(to bottom, #3d3d3d, #111111);
+        background-clip: padding-box;
+    }
+
+    /* Row groups also need fill in Firefox */
+    .enyo-group {
+        border-image: url(build/palm/themes/Onyx/images/group-unlabeled.png) 14 14 fill repeat repeat;
+    }
+
+    .enyo-group.labeled {
+        border-image: url(build/palm/themes/Onyx/images/group-labeled.png) 36 14 14 14 fill repeat repeat;
+    }
 }

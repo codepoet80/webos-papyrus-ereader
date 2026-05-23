@@ -26,6 +26,24 @@ enyo.kind({
 			return a ? a.calcSlideMin() : 0;
 		}
 		return -this.contentPeek;
+	},
+	// enyo-build.js applySlideToNode only sets node.style.webkitTransform.
+	// In Firefox the JS write API style.webkitTransform is a no-op (only CSS
+	// -webkit-transform is accepted; the JS setter is not mapped).  Override to
+	// also write the unprefixed node.style.transform so panel positioning works
+	// in Firefox and any other browser where the webkit JS setter is not wired up.
+	// PeekingSlider is always the content panel (index > 0), so we unconditionally
+	// mirror whatever transform was computed after delegating to the base method.
+	applySlideToNode: function(a) {
+		this.inherited(arguments);
+		// Mirror the transform without the webkit prefix.
+		// this.slidePosition is now up-to-date (set by inherited).
+		if (this.hasNode()) {
+			var pos = this.slidePosition;
+			this.node.style.transform = (pos !== null && pos !== undefined)
+				? "translate3d(" + pos + "px,0,0)"
+				: "";
+		}
 	}
 });
 
@@ -89,6 +107,24 @@ enyo.kind({
 			this._isLandscape = false;
 			this.showPortraitView(true);
 		}
+	},
+
+	// rendered() fires after the DOM is fully built and Enyo has completed its
+	// first resize/layout pass (resize() runs inside SlidingPane.rendered()).
+	// create() calls showPortraitView() above, but at that point offsetLeft values
+	// may still be 0 (DOM not yet measured) so transforms can be wrong.
+	// This deferred call re-applies the portrait selection after the browser has
+	// had time to measure and paint the initial layout, ensuring the content panel
+	// is correctly positioned at narrow widths.
+	rendered: function() {
+		this.inherited(arguments);
+		var self = this;
+		setTimeout(function() {
+			if (!self.isWideLayout() && self.view !== self.$.contentPanel) {
+				enyo.log("KindlePanels.rendered: deferred portrait correction");
+				self.showPortraitView(true);
+			}
+		}, 100);
 	},
 
 	handleLibraryViewCatChange: function(o, categoryId) {

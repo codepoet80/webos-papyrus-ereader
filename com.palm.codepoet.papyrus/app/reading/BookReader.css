@@ -395,27 +395,33 @@
 	padding: 0 5px;
 	margin-right: -1px;
 	-webkit-border-image: url(../../images/reading-font-radiobuttons.png) 68 5 102 5;
+	border-image: url(../../images/reading-font-radiobuttons.png) 68 5 102 5 fill stretch;
 }
 .font-theme-controls .enyo-radiobutton.enyo-first {
 	padding: 0 5px;
 	margin-right: -1px;
 	-webkit-border-image: url(../../images/reading-font-radiobuttons.png) 0 5 170 5;
+	border-image: url(../../images/reading-font-radiobuttons.png) 0 5 170 5 fill stretch;
 }
 .font-theme-controls .enyo-radiobutton.enyo-last {
 	padding: 0 5px;
 	-webkit-border-image: url(../../images/reading-font-radiobuttons.png) 136 5 34 5;
+	border-image: url(../../images/reading-font-radiobuttons.png) 136 5 34 5 fill stretch;
 }
 .font-theme-controls .enyo-radiobutton.enyo-middle.enyo-button-depressed,
 .font-theme-controls .enyo-radiobutton.enyo-middle.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-font-radiobuttons.png) 102 5 68 5;
+	border-image: url(../../images/reading-font-radiobuttons.png) 102 5 68 5 fill stretch;
 }
 .font-theme-controls .enyo-radiobutton.enyo-first.enyo-button-depressed,
 .font-theme-controls .enyo-radiobutton.enyo-first.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-font-radiobuttons.png) 34 5 136 5;
+	border-image: url(../../images/reading-font-radiobuttons.png) 34 5 136 5 fill stretch;
 }
 .font-theme-controls .enyo-radiobutton.enyo-last.enyo-button-depressed,
 .font-theme-controls .enyo-radiobutton.enyo-last.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-font-radiobuttons.png) 170 5 0 5;
+	border-image: url(../../images/reading-font-radiobuttons.png) 170 5 0 5 fill stretch;
 }
 .font-theme-controls .enyo-radiobutton .enyo-button-icon {
 	margin-bottom:-2px;
@@ -588,17 +594,21 @@ White
 }
 .white .font-style-controls .enyo-radiobutton.enyo-first {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 0 5 385 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 0 5 385 5 fill stretch;
 }
 .white .font-style-controls .enyo-radiobutton.enyo-last {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 70 5 315 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 70 5 315 5 fill stretch;
 }
 .white .font-style-controls .enyo-radiobutton.enyo-first.enyo-button-depressed,
 .white .font-style-controls .enyo-radiobutton.enyo-first.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 35 5 350 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 35 5 350 5 fill stretch;
 }
 .white .font-style-controls .enyo-radiobutton.enyo-last.enyo-button-depressed,
 .white .font-style-controls .enyo-radiobutton.enyo-last.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 105 5 280 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 105 5 280 5 fill stretch;
 }
 .white.book-reader-top .enyo-button-icon,
 .white.bottom-row-controls .enyo-button-icon,
@@ -654,17 +664,21 @@ Sepia
 }
 .sepia .font-style-controls .enyo-radiobutton.enyo-first {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 140 5 245 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 140 5 245 5 fill stretch;
 }
 .sepia .font-style-controls .enyo-radiobutton.enyo-last {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 210 5 175 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 210 5 175 5 fill stretch;
 }
 .sepia .font-style-controls .enyo-radiobutton.enyo-first.enyo-button-depressed,
 .sepia .font-style-controls .enyo-radiobutton.enyo-first.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 175 5 210 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 175 5 210 5 fill stretch;
 }
 .sepia .font-style-controls .enyo-radiobutton.enyo-last.enyo-button-depressed,
 .sepia .font-style-controls .enyo-radiobutton.enyo-last.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 245 5 140 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 245 5 140 5 fill stretch;
 }
 .sepia.book-reader-top .enyo-button-icon,
 .sepia.bottom-row-controls .enyo-button-icon,
@@ -721,17 +735,21 @@ Black
 }
 .black .font-style-controls .enyo-radiobutton.enyo-first {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 280 5 105 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 280 5 105 5 fill stretch;
 }
 .black .font-style-controls .enyo-radiobutton.enyo-last {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 350 5 35 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 350 5 35 5 fill stretch;
 }
 .black .font-style-controls .enyo-radiobutton.enyo-first.enyo-button-depressed,
 .black .font-style-controls .enyo-radiobutton.enyo-first.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 315 5 70 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 315 5 70 5 fill stretch;
 }
 .black .font-style-controls .enyo-radiobutton.enyo-last.enyo-button-depressed,
 .black .font-style-controls .enyo-radiobutton.enyo-last.enyo-button-down {
 	-webkit-border-image: url(../../images/reading-fonttype-btn.png) 385 5 0 5;
+	border-image: url(../../images/reading-fonttype-btn.png) 385 5 0 5 fill stretch;
 }
 .black.book-reader-top .enyo-button-icon,
 .black.bottom-row-controls .enyo-button-icon,
