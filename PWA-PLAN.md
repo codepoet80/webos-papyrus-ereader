@@ -53,7 +53,7 @@ The existing `window.PalmSystem` checks in the code give us a clean detection po
 | `enyo.windows.addBannerMessage()` | `Main.js`, `BookReader.js` | DOM toast notification | ✅ Done — `webos-compat.js` |
 | `ApplicationEvents` kind | `Main.js` | `window.addEventListener('focus'/'blur'/'resize')` | ✅ Done — `webos-compat.js` |
 | `PalmServiceBridge` | `FileImporter.js` | Failure stub; browser path uses FileReader API | ✅ Done — `webos-compat.js` + `FileImporter.js` |
-| `Helpers.Updater` / App Museum | `Main.js` | Show a "check for updates" link or hide entirely | Not yet addressed |
+| `Helpers.Updater` / App Museum | `Main.js` | Show a "check for updates" link or hide entirely | ✅ Done — `CheckForUpdate` guarded with `if (window.PalmSystem)` in `Main.js` |
 
 All browser shims live in `webos-compat.js` — no `if (window.PalmSystem)` scattered through app code.
 
@@ -155,7 +155,7 @@ service worker's static cache list.
 4. ✅ Brightness slider hidden on non-webOS (`top_row.js`); CSS filter dimming deferred
 5. Goal: feature parity with webOS version on supported platforms ✅
 
-### Phase 5 — Enyo 1 FlexLayout Browser Compatibility ⚠️ IN PROGRESS
+### Phase 5 — Enyo 1 FlexLayout Browser Compatibility ✅ DONE
 
 Enyo 1 uses `-webkit-box-flex` (old flexbox spec). Modern Chrome supports this for
 backwards compatibility, but the `flow()` / `flowExtent()` functions in Enyo's layout
@@ -174,13 +174,12 @@ engine write properties that break under the modern flex model.
 on `.enyo-hflexbox`/`.enyo-vflexbox` (from earlier session).
 
 **Result:** ContentNavigator toolbar (sort dropdown, grid/list toggle, search icon)
-now lays out correctly instead of stacking/collapsing.
+now lays out correctly. Book grid 80px offset also resolved via phone layout work
+in `ViewBase.js` and `BookItems.css`.
 
-**⚠️ Remaining issue:** After the flex-grow fix, the book grid appears ~80px shifted
-to the right. Root cause not yet identified analytically. Next step: use DevTools
-Elements panel to find which ancestor of the book covers has a non-zero `left`,
-`margin-left`, `padding-left`, or `transform/translateX`. Candidates to inspect:
-gridContainer → gridScroller → contentView → ContentNavigator div → content-panel div.
+**Phone / portrait layout** also done: `PeekingSlider` custom kind keeps 64px of
+the content panel peeking from the right edge in single-view (phone) mode; landscape
+vs. portrait detection drives `showLandscapeView`/`showPortraitView` in `KindlePanels.js`.
 
 **Important warning:** Do NOT add `!important` to `.enyo-hflexbox` or `.enyo-vflexbox`
 CSS rules — this breaks VFlexBox layout, causing books to become un-tappable and the

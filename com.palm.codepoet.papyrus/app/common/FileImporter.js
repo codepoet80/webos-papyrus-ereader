@@ -202,6 +202,113 @@ FileImporter.prototype.importEpub = function(filePath, callback, keepAlive) {
 };
 
 /**
+ * Shared pipeline: ArrayBuffer → ZipFile → EpubReader → HTMLBook → BookData.
+ * Called by both _importEpubFromBrowserFile (after FileReader) and
+ * importEpubFromUrl (after XHR). filePath is stored on the BookData record
+ * and used as the dedup key in saveBookMetadata — pass the original file name
+ * (for user imports) or the relative URL (for sample books) so re-imports
+ * don't create duplicates.
+ */
+FileImporter.prototype._processEpubArrayBuffer = function(arrayBuffer, filename, filePath, callback, ping) {
+	var self = this;
+
+	var byteReader = new ArrayBufferByteReader(arrayBuffer);
+	byteReader._name = filename;
+
+	var zipFile;
+	try {
+		zipFile = new ZipFile(byteReader);
+		if (zipFile.error !== 0) {
+			callback(null, 'Failed to parse ZIP archive, error code: ' + zipFile.error);
+			return;
+		}
+	} catch (ex) {
+		callback(null, 'Failed to open ePub archive: ' + (ex.message || ex));
+		return;
+	}
+
+	ping('Parsing ePub...');
+
+	new EpubReader(zipFile, function(zip, epubReader) {
+		if (epubReader == null) {
+			callback(null, 'Failed to parse ePub. The file may be corrupted, invalid, or DRM protected.');
+			return;
+		}
+
+		var metadata = epubReader.getMetadata() || {};
+		var bookName = metadata.title || epubReader.getName() || filename.replace(/\.epub$/i, '');
+
+		enyo.log('Book metadata: title=' + metadata.title + ', author=' + metadata.author);
+
+		var rawCoverDataUrl = null;
+		try {
+			rawCoverDataUrl = epubReader.getCoverImage();
+		} catch (ex) {
+			enyo.warn('Error extracting cover: ' + ex);
+		}
+
+		var dbName = 'ereader_' + self.generateUniqueId(filePath);
+
+		var continueWithCover = function(coverImageData) {
+			var htmlBookStarted = false;
+			var htmlBookHeartbeatTicks = 0;
+			var htmlBookHeartbeat = setInterval(function() {
+				if (htmlBookStarted || htmlBookHeartbeatTicks++ >= 6) {
+					clearInterval(htmlBookHeartbeat);
+					return;
+				}
+				ping('Preparing database...');
+			}, 5000);
+
+			var htmlBookProgress = function(phase) {
+				htmlBookStarted = true;
+				clearInterval(htmlBookHeartbeat);
+				ping(phase);
+			};
+
+			new HTMLBook(epubReader, false, dbName, function(book) {
+				clearInterval(htmlBookHeartbeat);
+				if (!book || !book.isReady) {
+					callback(null, 'Failed to process ePub content');
+					return;
+				}
+
+				var bookData = new BookData({
+					asin: self.generateUniqueId(filePath),
+					title: metadata.title || bookName,
+					author: metadata.author || '',
+					publisher: metadata.publisher || '',
+					language: metadata.language || '',
+					bookFilePath: filePath,
+					bookDbName: dbName,
+					coverImagePath: coverImageData || '',
+					locationsCompleted: 0,
+					locationsTotal: 10000,
+					bookByteLength: book.getLength() || 0,
+					dateAdded: Date.now(),
+					lastAccessed: Date.now()
+				});
+
+				self.saveBookMetadata(bookData);
+				enyo.log('Book imported successfully: ' + bookData.title);
+				callback(bookData, null);
+			}, htmlBookProgress);
+		};
+
+		if (rawCoverDataUrl) {
+			ping('Scaling cover...');
+			self.scaleCoverToThumbnail(rawCoverDataUrl, 120, 180, function(thumbnail) {
+				ping('Processing content...');
+				continueWithCover(thumbnail);
+			});
+		} else {
+			ping('Processing content...');
+			continueWithCover(null);
+		}
+	}, null);
+};
+
+/**
  * Import an ePub from a browser File object (FileReader API path).
  * Called by importEpub when it receives a File object instead of a path string.
  * ZipFile and EpubReader are unchanged — ArrayBufferByteReader bridges the gap.
@@ -220,109 +327,104 @@ FileImporter.prototype._importEpubFromBrowserFile = function(file, callback, pin
 	ping('Reading file...');
 
 	var fileReader = new FileReader();
-
 	fileReader.onload = function(e) {
-		var byteReader = new ArrayBufferByteReader(e.target.result);
-		byteReader._name = filename;
-
-		var zipFile;
-		try {
-			zipFile = new ZipFile(byteReader);
-			if (zipFile.error !== 0) {
-				callback(null, 'Failed to parse ZIP archive, error code: ' + zipFile.error);
-				return;
-			}
-		} catch (ex) {
-			callback(null, 'Failed to open ePub archive: ' + (ex.message || ex));
-			return;
-		}
-
-		ping('Parsing ePub...');
-
-		new EpubReader(zipFile, function(zip, epubReader) {
-			if (epubReader == null) {
-				callback(null, 'Failed to parse ePub. The file may be corrupted, invalid, or DRM protected.');
-				return;
-			}
-
-			var metadata = epubReader.getMetadata() || {};
-			var bookName = metadata.title || epubReader.getName() || filename.replace(/\.epub$/i, '');
-
-			enyo.log('Book metadata: title=' + metadata.title + ', author=' + metadata.author);
-
-			var rawCoverDataUrl = null;
-			try {
-				rawCoverDataUrl = epubReader.getCoverImage();
-			} catch (ex) {
-				enyo.warn('Error extracting cover: ' + ex);
-			}
-
-			var dbName = 'ereader_' + self.generateUniqueId(filename);
-
-			var continueWithCover = function(coverImageData) {
-				var htmlBookStarted = false;
-				var htmlBookHeartbeatTicks = 0;
-				var htmlBookHeartbeat = setInterval(function() {
-					if (htmlBookStarted || htmlBookHeartbeatTicks++ >= 6) {
-						clearInterval(htmlBookHeartbeat);
-						return;
-					}
-					ping('Preparing database...');
-				}, 5000);
-
-				var htmlBookProgress = function(phase) {
-					htmlBookStarted = true;
-					clearInterval(htmlBookHeartbeat);
-					ping(phase);
-				};
-
-				new HTMLBook(epubReader, false, dbName, function(book) {
-					clearInterval(htmlBookHeartbeat);
-					if (!book || !book.isReady) {
-						callback(null, 'Failed to process ePub content');
-						return;
-					}
-
-					var bookData = new BookData({
-						asin: self.generateUniqueId(filename),
-						title: metadata.title || bookName,
-						author: metadata.author || '',
-						publisher: metadata.publisher || '',
-						language: metadata.language || '',
-						bookFilePath: filename,
-						bookDbName: dbName,
-						coverImagePath: coverImageData || '',
-						locationsCompleted: 0,
-						locationsTotal: 10000,
-						bookByteLength: book.getLength() || 0,
-						dateAdded: Date.now(),
-						lastAccessed: Date.now()
-					});
-
-					self.saveBookMetadata(bookData);
-					enyo.log('Book imported successfully: ' + bookData.title);
-					callback(bookData, null);
-				}, htmlBookProgress);
-			};
-
-			if (rawCoverDataUrl) {
-				ping('Scaling cover...');
-				self.scaleCoverToThumbnail(rawCoverDataUrl, 120, 180, function(thumbnail) {
-					ping('Processing content...');
-					continueWithCover(thumbnail);
-				});
-			} else {
-				ping('Processing content...');
-				continueWithCover(null);
-			}
-		}, null);
+		self._processEpubArrayBuffer(e.target.result, filename, filename, callback, ping);
 	};
-
 	fileReader.onerror = function() {
 		callback(null, 'Failed to read file: ' + filename);
 	};
-
 	fileReader.readAsArrayBuffer(file);
+};
+
+/**
+ * Import an ePub from a URL (relative or absolute).
+ * Uses XHR with responseType='arraybuffer' — works on both modern browsers
+ * and webOS 3 (WebKit 534, which supports ArrayBuffer responseType).
+ * The url is used as the bookFilePath dedup key so re-fetching the same
+ * sample URL never creates a duplicate library entry.
+ */
+FileImporter.prototype.importEpubFromUrl = function(url, filename, callback, ping) {
+	var self = this;
+	ping = ping || function() {};
+
+	enyo.log('FileImporter.importEpubFromUrl: ' + url);
+	ping('Fetching ' + filename + '...');
+
+	var xhr = new XMLHttpRequest();
+	xhr.open('GET', url, true);
+	xhr.responseType = 'arraybuffer';
+
+	xhr.onload = function() {
+		if (xhr.status < 200 || xhr.status >= 400) {
+			callback(null, 'HTTP ' + xhr.status + ' fetching ' + filename);
+			return;
+		}
+		ping('Reading file...');
+		self._processEpubArrayBuffer(xhr.response, filename, url, callback, ping);
+	};
+
+	xhr.onerror = function() {
+		callback(null, 'Network error fetching ' + filename);
+	};
+
+	xhr.send(null);
+};
+
+/**
+ * Sample books bundled with the app — installed on first launch so new users
+ * never start with an empty library.  Users can delete these books normally;
+ * the flag ensures they are never re-installed after deletion.
+ */
+FileImporter.SAMPLE_BOOKS = [
+	{ url: 'sample-books/AliceInWonderland-Carroll.epub',   filename: 'AliceInWonderland-Carroll.epub'   },
+	{ url: 'sample-books/HoundOfBaskervilles-Doyle.epub',   filename: 'HoundOfBaskervilles-Doyle.epub'   }
+];
+FileImporter.SAMPLES_FLAG = 'ereader_samples_installed';
+
+/**
+ * Install sample books on first launch.
+ *
+ * Checks localStorage for SAMPLES_FLAG.  If already set, calls completeCallback
+ * immediately (nothing to do).  Otherwise imports each sample book via
+ * importEpubFromUrl, calling progressCallback(current, total) for each, then
+ * sets the flag and calls completeCallback when finished.
+ *
+ * Errors on individual books are logged and skipped — a partial install still
+ * sets the flag so we don't retry on next launch.
+ */
+FileImporter.prototype.installSampleBooks = function(progressCallback, completeCallback) {
+	if (localStorage.getItem(FileImporter.SAMPLES_FLAG)) {
+		completeCallback();
+		return;
+	}
+
+	var self = this;
+	var samples = FileImporter.SAMPLE_BOOKS;
+	var index = 0;
+
+	function importNext() {
+		if (index >= samples.length) {
+			localStorage.setItem(FileImporter.SAMPLES_FLAG, 'true');
+			completeCallback();
+			return;
+		}
+
+		var sample = samples[index];
+		index++;
+
+		if (progressCallback) progressCallback(index, samples.length);
+
+		self.importEpubFromUrl(sample.url, sample.filename, function(book, error) {
+			if (error) {
+				enyo.warn('Sample book install failed (' + sample.filename + '): ' + error);
+			} else {
+				enyo.log('Sample book installed: ' + (book ? book.title : sample.filename));
+			}
+			importNext();
+		}, function() {});  // ping is a no-op for silent background install
+	}
+
+	importNext();
 };
 
 /**

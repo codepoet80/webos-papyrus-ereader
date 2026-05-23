@@ -3,7 +3,7 @@
 // every same-origin asset dynamically so the full app is available offline
 // after the first complete load.
 
-const CACHE_NAME = 'papyrus-v38';
+const CACHE_NAME = 'papyrus-v39';
 
 // Critical shell assets — cached at install time so the app can boot offline
 const SHELL_ASSETS = [
@@ -15,7 +15,10 @@ const SHELL_ASSETS = [
     './icon.png',
     './icon-256.png',
     './icons/192.png',
-    './icons/512.png'
+    './icons/512.png',
+    // Sample books — pre-cached so first-launch install works offline
+    './sample-books/AliceInWonderland-Carroll.epub',
+    './sample-books/HoundOfBaskervilles-Doyle.epub'
 ];
 
 self.addEventListener('install', function(event) {

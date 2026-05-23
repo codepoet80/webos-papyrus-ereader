@@ -195,11 +195,38 @@ enyo.kind({
 
 	libraryLoaded: function(library) {
 		this.log("Library loaded with " + library.entries.length + " books");
-		// Refresh library view if navigator is ready
-		if (this.$.navigator) {
-			this.$.navigator.rebuildView();
+
+		var self = this;
+
+		var finishLibraryLoad = function() {
+			if (self.$.navigator) {
+				self.$.navigator.rebuildView();
+			}
+			if (window.PalmSystem) {
+				self.$.myUpdater.CheckForUpdate("Papyrus eReader");
+			}
+		};
+
+		// On first launch, install bundled sample books so users never start
+		// with an empty library.  The flag is set by FileImporter after install
+		// completes and persists across launches.  If a user deletes the sample
+		// books the flag stays set, so they are never re-installed.
+		if (localStorage.getItem(FileImporter.SAMPLES_FLAG)) {
+			finishLibraryLoad();
+			return;
 		}
-		this.$.myUpdater.CheckForUpdate("Papyrus eReader");
+
+		self.showSpinnerPopup("Preparing your library...");
+		var importer = new FileImporter();
+		importer.installSampleBooks(
+			function(current, total) {
+				self.showSpinnerPopup("Adding sample " + current + " of " + total + "...");
+			},
+			function() {
+				self.hideSpinnerPopup();
+				finishLibraryLoad();
+			}
+		);
 	},
 
 	importMultipleBooks: function(filePaths) {
