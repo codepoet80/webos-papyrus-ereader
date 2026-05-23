@@ -185,38 +185,26 @@
             var self = this;
             this._input = document.createElement('input');
             this._input.type = 'file';
-            // Keep off-screen but in the render tree so iOS doesn't drop events.
-            // No opacity:0 — some iOS versions suppress 'change' when opacity is 0.
-            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;';
+            // iOS Safari silently drops the selection and never fires 'change'
+            // when the input is display:none. Keep it in the render tree but
+            // visually invisible instead.
+            // NOTE: viewport-fit=cover must NOT be set in the viewport meta tag —
+            // with it, iOS stops routing the file picker result back to off-screen
+            // inputs and 'change' never fires.
+            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;';
             this._picking = false;
-            this._focusHandler = null;
-
-            var dispatch = function() {
-                var files = Array.prototype.slice.call(self._input.files);
-                if (!files.length) return false;
-                if (!self._picking) return false;
+            var handler = function () {
+                if (!self._picking) return;
                 self._picking = false;
-                if (self._focusHandler) {
-                    window.removeEventListener('focus', self._focusHandler);
-                    self._focusHandler = null;
-                }
-                self.doPickFile(files);
-                self._input.value = '';
-                return true;
+                var files = Array.prototype.slice.call(self._input.files);
+                if (files.length) self.doPickFile(files);
+                self._input.value = ''; // allow re-selecting the same file
             };
-
-            // Primary: 'change' fires on desktop and most mobile browsers
-            this._input.addEventListener('change', dispatch);
-            // Fallback: 'input' for browsers that fire input instead of change
-            this._input.addEventListener('input',  dispatch);
-
+            this._input.addEventListener('change', handler);
+            this._input.addEventListener('input',  handler); // iOS fallback
             document.body.appendChild(this._input);
         },
         destroy: function () {
-            if (this._focusHandler) {
-                window.removeEventListener('focus', this._focusHandler);
-                this._focusHandler = null;
-            }
             if (this._input && this._input.parentNode) {
                 this._input.parentNode.removeChild(this._input);
             }
@@ -234,33 +222,6 @@
             this._input.accept = (types.indexOf('document') >= 0) ? '.epub,.pdf' : '.epub';
             this._picking = true;
             this._input.click();
-
-            // iOS workaround: programmatic input.click() opens the system file
-            // picker but iOS may not fire 'change' on our element when the user
-            // returns. When the app regains focus (window 'focus' event), check
-            // input.files directly — iOS does populate it even without 'change'.
-            var self = this;
-            if (this._focusHandler) {
-                window.removeEventListener('focus', this._focusHandler);
-            }
-            this._focusHandler = function() {
-                window.removeEventListener('focus', self._focusHandler);
-                self._focusHandler = null;
-                // Small delay: let iOS finish populating input.files
-                setTimeout(function() {
-                    if (!self._picking) return; // 'change' already handled it
-                    var files = Array.prototype.slice.call(self._input.files);
-                    if (files.length) {
-                        self._picking = false;
-                        self.doPickFile(files);
-                        self._input.value = '';
-                    } else {
-                        // Picker was cancelled or files not populated
-                        self._picking = false;
-                    }
-                }, 300);
-            };
-            window.addEventListener('focus', this._focusHandler);
         }
     });
 
