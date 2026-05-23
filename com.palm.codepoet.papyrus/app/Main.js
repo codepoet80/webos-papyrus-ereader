@@ -773,8 +773,13 @@ enyo.kind({
 	handleFilePicked: function(inSender, inResponse) {
 		this.log("FilePicker response received");
 
-		// Browser environment: webos-compat.js FilePicker stub passes File objects directly
-		if (Array.isArray(inResponse) && inResponse.length > 0 && inResponse[0] instanceof Blob) {
+		// Browser environment: webos-compat.js FilePicker stub passes File objects directly.
+		// Use duck-typing (.name is a string) instead of instanceof Blob — on some iOS
+		// versions File objects from the native picker fail the Blob realm check, causing
+		// the code to fall through silently to the webOS string-path handler below.
+		if (Array.isArray(inResponse) && inResponse.length > 0 &&
+				inResponse[0] !== null && typeof inResponse[0] === 'object' &&
+				typeof inResponse[0].name === 'string') {
 			var epubFiles = inResponse.filter(function(f) {
 				return f.name && f.name.toLowerCase().indexOf('.epub') !== -1;
 			});
