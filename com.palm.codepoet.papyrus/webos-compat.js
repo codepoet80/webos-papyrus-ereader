@@ -194,10 +194,11 @@
             this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;';
             this._picking = false;
             var handler = function () {
+                var files = Array.prototype.slice.call(self._input.files);
+                if (!files.length) return;
                 if (!self._picking) return;
                 self._picking = false;
-                var files = Array.prototype.slice.call(self._input.files);
-                if (files.length) self.doPickFile(files);
+                self.doPickFile(files);
                 self._input.value = ''; // allow re-selecting the same file
             };
             this._input.addEventListener('change', handler);
@@ -217,9 +218,41 @@
         },
         open: function (opts) {
             opts = opts || {};
-            this._input.multiple = !!(opts.allowMultiSelect || this.allowMultiSelect);
+            var self = this;
+            var multiple = !!(opts.allowMultiSelect || this.allowMultiSelect);
             var types = opts.fileType || this.fileType || [];
-            this._input.accept = (types.indexOf('document') >= 0) ? '.epub,.pdf' : '.epub';
+            var wantDocs = (types.indexOf('document') >= 0);
+
+            // File System Access API — Safari 15.2+, Chrome 86+.
+            // Bypasses the hidden-input mechanism that iOS PWA silently breaks
+            // (input.click() opens picker but change event never fires on iOS).
+            if (window.showOpenFilePicker) {
+                var pickerOpts = {
+                    multiple: multiple,
+                    types: [{
+                        description: 'ePub books',
+                        accept: wantDocs
+                            ? { 'application/epub+zip': ['.epub'], 'application/pdf': ['.pdf'] }
+                            : { 'application/epub+zip': ['.epub'] }
+                    }],
+                    excludeAcceptAllOption: false
+                };
+                window.showOpenFilePicker(pickerOpts)
+                    .then(function (handles) {
+                        return Promise.all(handles.map(function (h) { return h.getFile(); }));
+                    })
+                    .then(function (files) {
+                        if (files.length) self.doPickFile(files);
+                    })
+                    .catch(function () {
+                        // AbortError = user cancelled; any other error ignored silently
+                    });
+                return;
+            }
+
+            // Fallback: legacy hidden <input> approach — webOS, Android, Safari < 15.2
+            this._input.multiple = multiple;
+            this._input.accept = wantDocs ? '.epub,.pdf' : '.epub';
             this._picking = true;
             this._input.click();
         }
