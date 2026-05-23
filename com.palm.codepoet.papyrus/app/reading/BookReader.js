@@ -54,7 +54,17 @@ enyo.kind({
 	create: function() {
 		this.inherited(arguments);
 		var self = this;
+		var _lastResizeWidth = window.innerWidth;
 		this._onResize = function() {
+			// On Android Chrome, the URL bar show/hide fires a resize event that
+			// changes only window.innerHeight (by ~56px).  Re-paginating in that
+			// case causes the book to briefly reflow and the layout to jump.
+			// Only re-paginate when the viewport WIDTH changes (true orientation
+			// change or window resize on desktop).
+			var newWidth = window.innerWidth;
+			if (newWidth === _lastResizeWidth) return;
+			_lastResizeWidth = newWidth;
+
 			clearTimeout(self._resizeTimer);
 			self._resizeTimer = setTimeout(function() {
 				if (self.pluginReady) {

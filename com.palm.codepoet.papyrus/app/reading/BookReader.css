@@ -87,8 +87,28 @@
 	position: absolute;
 	bottom: 0;
 	width: 100%;
-	padding-right:15px;
+	padding-right: 15px;
+	/* Push controls above OS gesture area (home indicator on iOS,
+	   gesture bar on Android). Returns 0 on devices without one. */
+	padding-bottom: env(safe-area-inset-bottom);
+	box-sizing: border-box;
+	/* Only claim horizontal touch handling — vertical swipe-up (Android
+	   home gesture, iOS swipe-to-multitask) is passed through to the OS
+	   instead of being swallowed by Enyo's touch capture. */
+	touch-action: pan-x;
 	background: none !important;
+}
+
+/* In a browser tab, env(safe-area-inset-bottom) is 0 because Chrome normally
+   keeps content above the gesture zone — but when Chrome's own bar hides and
+   the viewport expands to the physical screen edge, there is no buffer left.
+   A fixed floor keeps the controls visibly above the gesture area on all
+   touch devices regardless of browser chrome state. On standalone PWA,
+   max() defers to the larger env() value automatically. */
+@media (hover: none) and (pointer: coarse) {
+	.bottom-row-controls {
+		padding-bottom: max(env(safe-area-inset-bottom), 20px);
+	}
 }
 
 .book-reader-top-right {
