@@ -190,18 +190,20 @@
             // visually invisible instead.
             this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;';
             this._picking = false;
-            var handler = function () {
-                // Read files BEFORE checking/clearing _picking.
-                // On some iOS versions the 'input' event fires before 'change'
-                // with an empty FileList, which would clear _picking and block
-                // the subsequent 'change' event that has the actual files.
-                // Skipping early if files is empty avoids that race.
+            var handler = function (evt) {
+                // DEBUG banner — shows regardless of any JS state issues
+                var dbg = document.createElement('div');
+                dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:red;color:white;padding:16px;font-size:20px;text-align:center;';
+                dbg.textContent = (evt ? evt.type : '?') + ' fired — files: ' + self._input.files.length + ', picking: ' + self._picking;
+                document.body.appendChild(dbg);
+                setTimeout(function() { if (dbg.parentNode) dbg.parentNode.removeChild(dbg); }, 5000);
+
                 var files = Array.prototype.slice.call(self._input.files);
-                if (!files.length) return;          // empty FileList — ignore
+                if (!files.length) return;
                 if (!self._picking) return;
                 self._picking = false;
                 self.doPickFile(files);
-                self._input.value = ''; // allow re-selecting the same file
+                self._input.value = '';
             };
             this._input.addEventListener('change', handler);
             this._input.addEventListener('input',  handler); // iOS fallback
