@@ -222,6 +222,14 @@
             var multiple = !!(opts.allowMultiSelect || this.allowMultiSelect);
             var types = opts.fileType || this.fileType || [];
             var wantDocs = (types.indexOf('document') >= 0);
+            var accept = wantDocs ? '.epub,.pdf' : '.epub';
+            var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+            if (isIOS) {
+                this._showIOSPickerOverlay(multiple, accept);
+                return;
+            }
 
             // File System Access API — Safari 15.2+, Chrome 86+.
             // Bypasses the hidden-input mechanism that iOS PWA silently breaks
@@ -252,9 +260,49 @@
 
             // Fallback: legacy hidden <input> approach — webOS, Android, Safari < 15.2
             this._input.multiple = multiple;
-            this._input.accept = wantDocs ? '.epub,.pdf' : '.epub';
+            this._input.accept = accept;
             this._picking = true;
             this._input.click();
+        },
+        _showIOSPickerOverlay: function (multiple, accept) {
+            var self = this;
+            var overlay = document.createElement('div');
+            var panel = document.createElement('div');
+            var input = document.createElement('input');
+            var cancel = document.createElement('button');
+
+            overlay.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:99998;background:rgba(0,0,0,0.55);display:-webkit-box;-webkit-box-align:center;-webkit-box-pack:center;display:flex;align-items:center;justify-content:center;';
+            panel.style.cssText = 'position:relative;width:280px;min-height:130px;padding:24px;background:#f7efe2;color:#2c1a0e;border-radius:10px;box-shadow:0 4px 24px rgba(0,0,0,0.45);font:18px/1.35 sans-serif;text-align:center;';
+            panel.innerHTML = '<div style="font-weight:bold;margin-bottom:8px;">Import ePub</div><div>Tap here to choose a book.</div>';
+
+            input.type = 'file';
+            input.multiple = multiple;
+            input.accept = accept;
+            input.style.cssText = 'position:absolute;left:0;top:0;right:0;width:100%;height:92px;opacity:0.01;z-index:2;';
+
+            cancel.type = 'button';
+            cancel.innerHTML = 'Cancel';
+            cancel.style.cssText = 'position:relative;z-index:3;margin-top:18px;padding:8px 18px;border:0;border-radius:6px;background:#5b4632;color:#fff;font:16px sans-serif;';
+
+            function closeOverlay() {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            }
+
+            function handler() {
+                var files = Array.prototype.slice.call(input.files);
+                if (!files.length) return;
+                closeOverlay();
+                self.doPickFile(files);
+            }
+
+            input.addEventListener('change', handler);
+            input.addEventListener('input', handler);
+            cancel.addEventListener('click', closeOverlay);
+
+            panel.appendChild(input);
+            panel.appendChild(cancel);
+            overlay.appendChild(panel);
+            document.body.appendChild(overlay);
         }
     });
 
