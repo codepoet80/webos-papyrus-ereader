@@ -188,16 +188,21 @@
             // iOS Safari silently drops the selection and never fires 'change'
             // when the input is display:none. Keep it in the render tree but
             // visually invisible instead.
-            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;';
+            // No opacity:0 — on modern iOS (17+) opacity:0 prevents the
+            // 'change' event from firing after the user picks a file.
+            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;';
             this._picking = false;
-            var handler = function (evt) {
-                // DEBUG banner — shows regardless of any JS state issues
+
+            var showDbg = function(msg) {
                 var dbg = document.createElement('div');
                 dbg.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:red;color:white;padding:16px;font-size:20px;text-align:center;';
-                dbg.textContent = (evt ? evt.type : '?') + ' fired — files: ' + self._input.files.length + ', picking: ' + self._picking;
+                dbg.textContent = msg;
                 document.body.appendChild(dbg);
                 setTimeout(function() { if (dbg.parentNode) dbg.parentNode.removeChild(dbg); }, 5000);
+            };
 
+            var handler = function (evt) {
+                showDbg((evt ? evt.type : '?') + ' on input — files: ' + self._input.files.length + ', picking: ' + self._picking);
                 var files = Array.prototype.slice.call(self._input.files);
                 if (!files.length) return;
                 if (!self._picking) return;
@@ -206,7 +211,19 @@
                 self._input.value = '';
             };
             this._input.addEventListener('change', handler);
-            this._input.addEventListener('input',  handler); // iOS fallback
+            this._input.addEventListener('input',  handler);
+
+            // Global fallback: catch 'change' events that iOS might fire on
+            // document instead of on the specific input element.
+            document.addEventListener('change', function(evt) {
+                if (evt.target === self._input) return; // already handled
+                if (!self._picking) return;
+                var files = evt.target && evt.target.files ? Array.prototype.slice.call(evt.target.files) : [];
+                showDbg('change on DOCUMENT (target=' + (evt.target ? evt.target.tagName : '?') + ') files:' + files.length + ' picking:' + self._picking);
+                if (!files.length) return;
+                self._picking = false;
+                self.doPickFile(files);
+            });
             document.body.appendChild(this._input);
         },
         destroy: function () {
