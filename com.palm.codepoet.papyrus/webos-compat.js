@@ -292,7 +292,9 @@
                 var files = Array.prototype.slice.call(input.files);
                 if (!files.length) return;
                 closeOverlay();
-                self.doPickFile(files);
+                setTimeout(function () {
+                    self.doPickFile(files);
+                }, 50);
             }
 
             input.addEventListener('change', handler);
