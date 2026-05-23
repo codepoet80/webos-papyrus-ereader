@@ -185,23 +185,20 @@
             var self = this;
             this._input = document.createElement('input');
             this._input.type = 'file';
-            // Keep in the render tree but off-screen.
-            // display:none / visibility:hidden / opacity:0 all cause iOS to
-            // silently drop the selection or refuse input.click().
-            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;';
+            // iOS Safari silently drops the selection and never fires 'change'
+            // when the input is display:none. Keep it in the render tree but
+            // visually invisible instead.
+            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;';
             this._picking = false;
             var handler = function () {
                 if (!self._picking) return;
                 self._picking = false;
-                var files = [];
-                for (var i = 0; i < self._input.files.length; i++) {
-                    files.push(self._input.files[i]);
-                }
+                var files = Array.prototype.slice.call(self._input.files);
                 if (files.length) self.doPickFile(files);
                 self._input.value = ''; // allow re-selecting the same file
             };
             this._input.addEventListener('change', handler);
-            this._input.addEventListener('input',  handler); // iOS belt-and-suspenders
+            this._input.addEventListener('input',  handler); // iOS fallback
             document.body.appendChild(this._input);
         },
         destroy: function () {
