@@ -183,25 +183,94 @@
         create: function () {
             this.inherited(arguments);
             var self = this;
+
+            // Unique ID so the <label for> association works.
+            var inputId = 'papyrus-file-input-' + Date.now();
+
             this._input = document.createElement('input');
             this._input.type = 'file';
-            // iOS Safari silently drops the selection and never fires 'change'
-            // when the input is display:none. Keep it in the render tree but
-            // visually invisible instead.
-            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;';
+            this._input.id = inputId;
+            // Keep the input in the render tree but off-screen.
+            // display:none and visibility:hidden cause iOS to silently drop the
+            // selection; opacity:0 causes iOS to refuse input.click() from
+            // synthetic (non-native) event handlers.  Off-screen + no opacity
+            // is the safest combination across all browsers.
+            this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;overflow:hidden;';
             this._picking = false;
+
             var handler = function () {
                 if (!self._picking) return;
                 self._picking = false;
+                if (self._overlay) self._overlay.style.display = 'none';
                 var files = Array.prototype.slice.call(self._input.files);
                 if (files.length) self.doPickFile(files);
                 self._input.value = ''; // allow re-selecting the same file
             };
             this._input.addEventListener('change', handler);
-            this._input.addEventListener('input',  handler); // iOS fallback
+            this._input.addEventListener('input',  handler); // belt-and-suspenders
+
+            // iOS overlay — shown instead of input.click() on iOS because
+            // programmatic click() on a file input only works from a native DOM
+            // event handler; Enyo's synthetic onclick dispatch doesn't qualify.
+            // A <label for> association lets the user's real tap natively open
+            // the picker with no JavaScript intermediary.
+            // Detect iOS: iPhones/iPods via UA; iPads via UA or the iPadOS
+            // "Macintosh" UA disguise (maxTouchPoints > 1 distinguishes iPad).
+            var ua = navigator.userAgent || '';
+            this._isIOS = /iPad|iPhone|iPod/.test(ua) ||
+                          (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+
+            if (this._isIOS) {
+                var overlay = document.createElement('div');
+                overlay.style.cssText = [
+                    'display:none',
+                    'position:fixed',
+                    'top:0',
+                    'left:0',
+                    'width:100%',
+                    'height:100%',
+                    'z-index:10000',
+                    'background:rgba(0,0,0,0.55)',
+                    'align-items:center',
+                    'justify-content:center'
+                ].join(';');
+
+                var label = document.createElement('label');
+                label.setAttribute('for', inputId);
+                label.style.cssText = [
+                    'display:block',
+                    'background:#fff',
+                    'color:#333',
+                    'font-family:sans-serif',
+                    'font-size:18px',
+                    'font-weight:bold',
+                    'padding:22px 36px',
+                    'border-radius:12px',
+                    'cursor:pointer',
+                    'text-align:center'
+                ].join(';');
+                label.textContent = 'Tap to choose an ePub file';
+
+                overlay.appendChild(label);
+
+                // Tap on the dark backdrop cancels the picker.
+                overlay.addEventListener('click', function (e) {
+                    if (e.target === overlay) {
+                        self._picking = false;
+                        overlay.style.display = 'none';
+                    }
+                });
+
+                document.body.appendChild(overlay);
+                this._overlay = overlay;
+            }
+
             document.body.appendChild(this._input);
         },
         destroy: function () {
+            if (this._overlay && this._overlay.parentNode) {
+                this._overlay.parentNode.removeChild(this._overlay);
+            }
             if (this._input && this._input.parentNode) {
                 this._input.parentNode.removeChild(this._input);
             }
@@ -218,7 +287,13 @@
             var types = opts.fileType || this.fileType || [];
             this._input.accept = (types.indexOf('document') >= 0) ? '.epub,.pdf' : '.epub';
             this._picking = true;
-            this._input.click();
+            if (this._isIOS && this._overlay) {
+                // Show the overlay; the user taps the <label> which natively
+                // opens the file picker — no synthetic click() needed.
+                this._overlay.style.display = 'flex';
+            } else {
+                this._input.click();
+            }
         }
     });
 

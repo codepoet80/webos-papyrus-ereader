@@ -348,6 +348,20 @@ FileImporter.prototype.importEpubFromUrl = function(url, filename, callback, pin
 	ping = ping || function() {};
 
 	enyo.log('FileImporter.importEpubFromUrl: ' + url);
+
+	// On webOS, Uint8Array is not defined (WebKit 534 shipped ArrayBuffer
+	// support for XHR but never implemented the TypedArray constructors).
+	// Route through importEpub() instead, which uses the native pReader
+	// File class that operates directly on the webOS filesystem.
+	// Resolve the relative URL against the document location to get an
+	// absolute path (e.g. /media/cryptofs/.../sample-books/Alice.epub).
+	if (window.PalmSystem) {
+		var base = window.location.href.replace(/\/[^\/]*$/, '/'); // dir of index.html
+		var filePath = (base + url).replace(/^file:\/\//, '');
+		self.importEpub(filePath, callback, ping);
+		return;
+	}
+
 	ping('Fetching ' + filename + '...');
 
 	var xhr = new XMLHttpRequest();
