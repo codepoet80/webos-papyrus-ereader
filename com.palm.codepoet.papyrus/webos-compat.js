@@ -191,10 +191,16 @@
             this._input.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;overflow:hidden;';
             this._picking = false;
             var handler = function () {
+                // Read files BEFORE checking/clearing _picking.
+                // On some iOS versions the 'input' event fires before 'change'
+                // with an empty FileList, which would clear _picking and block
+                // the subsequent 'change' event that has the actual files.
+                // Skipping early if files is empty avoids that race.
+                var files = Array.prototype.slice.call(self._input.files);
+                if (!files.length) return;          // empty FileList — ignore
                 if (!self._picking) return;
                 self._picking = false;
-                var files = Array.prototype.slice.call(self._input.files);
-                if (files.length) self.doPickFile(files);
+                self.doPickFile(files);
                 self._input.value = ''; // allow re-selecting the same file
             };
             this._input.addEventListener('change', handler);

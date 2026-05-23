@@ -773,6 +773,9 @@ enyo.kind({
 	handleFilePicked: function(inSender, inResponse) {
 		this.log("FilePicker response received");
 
+		// --- Diagnostic toast: confirms this function was reached on iOS ---
+		enyo.windows.addBannerMessage("Pick received: " + (Array.isArray(inResponse) ? inResponse.length + " item(s)" : typeof inResponse), "{}", "icon.png");
+
 		// Browser environment: webos-compat.js FilePicker stub passes File objects directly.
 		// Use duck-typing (.name is a string) instead of instanceof Blob — on some iOS
 		// versions File objects from the native picker fail the Blob realm check, causing
@@ -836,7 +839,8 @@ enyo.kind({
 			// User selected files but none were epubs
 			this.showError("Import Error", "Please select ePub files only (.epub)");
 		} else {
-			this.log("No file paths in response");
+			// This is the silent-fail path — make it visible so we can diagnose
+			this.showError("Import Debug", "handleFilePicked reached but no files found.\nResponse type: " + typeof inResponse + "\nIs array: " + Array.isArray(inResponse) + "\nLength: " + (inResponse ? (inResponse.length || 0) : 0));
 		}
 	},
 
