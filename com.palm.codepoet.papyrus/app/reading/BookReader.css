@@ -88,9 +88,6 @@
 	bottom: 0;
 	width: 100%;
 	padding-right: 15px;
-	/* Push controls above OS gesture area (home indicator on iOS,
-	   gesture bar on Android). Returns 0 on devices without one. */
-	padding-bottom: env(safe-area-inset-bottom);
 	box-sizing: border-box;
 	/* Only claim horizontal touch handling — vertical swipe-up (Android
 	   home gesture, iOS swipe-to-multitask) is passed through to the OS
@@ -99,15 +96,15 @@
 	background: none !important;
 }
 
-/* In a browser tab, env(safe-area-inset-bottom) is 0 because Chrome normally
-   keeps content above the gesture zone — but when Chrome's own bar hides and
-   the viewport expands to the physical screen edge, there is no buffer left.
-   A fixed floor keeps the controls visibly above the gesture area on all
-   touch devices regardless of browser chrome state. On standalone PWA,
-   max() defers to the larger env() value automatically. */
+/* Float the toolbar above the OS gesture zone rather than padding it
+   internally — the element keeps its natural height and simply lifts
+   clear of the home indicator (iOS) or gesture bar (Android).
+   max() handles both standalone PWA (env() is the real inset) and
+   browser-tab mode where env() is 0 and the 20px floor provides a
+   safety buffer against Chrome's dynamic viewport expansion. */
 @media (hover: none) and (pointer: coarse) {
 	.bottom-row-controls {
-		padding-bottom: max(env(safe-area-inset-bottom), 20px);
+		bottom: max(env(safe-area-inset-bottom), 20px);
 	}
 }
 
