@@ -55,6 +55,11 @@ self.addEventListener('fetch', function(event) {
     var url = new URL(request.url);
     if (url.origin !== location.origin) return;
 
+    // Never serve serviceworker.js from cache — iOS Safari routes the SW update
+    // check through the active SW's fetch handler (violating the spec), so caching
+    // this file causes the old SW to permanently serve itself, blocking all updates.
+    if (url.pathname.endsWith('/serviceworker.js')) return;
+
     event.respondWith(
         caches.match(request).then(function(cached) {
             if (cached) return cached;
