@@ -20,11 +20,11 @@ enyo.kind({
 		{kind:"HFlexBox", className: "book-reader-bottom", components: [
 			{kind:"IconButton", name:"previousLocBtn", icon:"images/reader-icon-prev-loc.png", className: "back-button", onclick:"handlePreviousLocationSelected", disabled: true},
 			{kind: "HFlexBox", flex: 1, className: "location-info-bar", components: [
-				{name: "locationText1", content: "Location 1", className: "location-text small-text"},
+				{name: "locationText1", content: "Location 1", className: "location-text location-text-full small-text"},
 				{kind:"HFlexBox", className:"location-slider", flex: 1, components: [
 					{kind: "Slider", flex: 1, name: "progressSlider", tapPosition: true, animatePosition: true, onChanging:"handleSliderLocationChanging", onChange:"handleSliderLocationChanged", maximum: 500, minimum:1, position: 1},
 				]},
-				{name: "locationText2", content: "0%", className: "location-text location-text-left small-text"}
+				{name: "locationText2", content: "0%", className: "location-text location-text-left small-text", onclick: "handlePercentClick"}
 			]},
 			{kind: "Control", components: [
 				{kind: "ereader.reading.BookInfoPopup", name: "bookMenu", onActionSelected: "handleBookAction"},
@@ -38,6 +38,14 @@ enyo.kind({
 			{kind: "HFlexBox", flex: 1, components: [
 				{kind: "Button", flex: 1, name: "cancel", onclick: "dismissPopup", className: "enyo-button-light button-label", content: $L("Cancel")},
 				{kind: "Button", flex: 1, name: "okBtn", onclick: "sendLocationInfo", className: "enyo-button-light button-label", content: $L("OK")}
+			]}
+		]},
+		{kind: "Popup", name: "percentPopup", scrim: true, lazy: false, scrimClassName: "", onClose: "dismissPercentPopup", components: [
+			{content: "Go to percentage (0–100):", name: "enterPctTxt"},
+			{kind: "Input", name: "percentInput", autoKeyModifier: "num-lock", onkeypress: "testPercentEnter", onchange: "onPctInputChange", changeOnInput: true},
+			{kind: "HFlexBox", flex: 1, components: [
+				{kind: "Button", flex: 1, name: "cancelPct", onclick: "dismissPercentPopup", className: "enyo-button-light button-label", content: $L("Cancel")},
+				{kind: "Button", flex: 1, name: "okPctBtn", onclick: "sendPercentInfo", className: "enyo-button-light button-label", content: $L("OK")}
 			]}
 		]}
 	],
@@ -156,6 +164,10 @@ enyo.kind({
 		this.$.locationPopup.removeClass("white");
 		this.$.locationPopup.removeClass("black");
 		this.$.locationPopup.addClass(theclass);
+		this.$.percentPopup.removeClass("sepia");
+		this.$.percentPopup.removeClass("white");
+		this.$.percentPopup.removeClass("black");
+		this.$.percentPopup.addClass(theclass);
 		this.$.bookMenu.removeClass("sepia");
 		this.$.bookMenu.removeClass("white");
 		this.$.bookMenu.removeClass("black");
@@ -212,5 +224,53 @@ enyo.kind({
 	_clearLocation: function() {
 		this.$.location.setValue("");
 		this.curLocationValue = "";
+	},
+
+	// -------------------------------------------------------
+	// Percentage-jump popup (used on phone where slider is hidden)
+	// -------------------------------------------------------
+
+	handlePercentClick: function() {
+		this.$.percentPopup.openAtCenter();
+		this.$.percentInput.forceFocus();
+	},
+
+	sendPercentInfo: function() {
+		var raw = this.$.percentInput.getValue();
+		if (raw && raw.length > 0) {
+			var pct = parseInt(raw, 10);
+			if (!isNaN(pct)) {
+				pct = Math.max(0, Math.min(100, pct));
+				var loc = Math.round((pct / 100) * this.totalLocations);
+				this.doLocationSelected(loc);
+			}
+		}
+		this.dismissPercentPopup();
+	},
+
+	dismissPercentPopup: function() {
+		this.$.percentInput.setValue("");
+		this.$.percentPopup.close();
+	},
+
+	testPercentEnter: function(inSender, key) {
+		if (key.keyCode === 13) {
+			inSender.forceBlur();
+			this.sendPercentInfo();
+		}
+	},
+
+	onPctInputChange: function(inSender) {
+		var curVal = inSender.getValue();
+		if (!curVal) return;
+		var filtered = curVal.replace(/[^\d]/g, '');
+		if (filtered !== curVal) {
+			inSender.setValue(filtered);
+			return;
+		}
+		var num = parseInt(filtered, 10);
+		if (!isNaN(num) && num > 100) {
+			inSender.setValue("100");
+		}
 	}
 });

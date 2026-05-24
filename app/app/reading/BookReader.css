@@ -781,3 +781,50 @@ Black
 .black .font-size-box .enyo-button-down .enyo-button-icon {
 	background-position: 0 -160px;
 }
+
+/* ================================================================
+   Phone layout (≤499px): de-clutter reader toolbar
+   ================================================================ */
+@media (max-width: 499px) {
+
+    /* 1. Book title: flex into available space and truncate with ellipsis.
+          The desktop layout uses a fixed 390px width with negative margins
+          centred for the TouchPad; on phone we reset all that and let the
+          title fill the gap between the library button and the icon buttons. */
+    .reading-book-title {
+        width: auto !important;
+        -webkit-box-flex: 1 !important;
+        flex: 1 !important;
+        min-width: 0 !important;
+        margin-left: 0 !important;
+        margin-right: 0 !important;
+        padding: 0 4px !important;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* 2. Hide the previous-location (back arrow) button. */
+    .book-reader-bottom .back-button {
+        display: none !important;
+    }
+
+    /* 3a. Hide the "Location X of Y" text — only the % label stays. */
+    .location-text-full {
+        display: none !important;
+    }
+
+    /* 3b. Hide the progress slider entirely. */
+    .location-slider {
+        display: none !important;
+    }
+
+    /* 3c. Make the percentage label visually indicate it is tappable. */
+    .location-text-left {
+        cursor: pointer;
+        padding: 0 14px;
+        border-radius: 4px;
+        text-decoration: underline dotted;
+        -webkit-tap-highlight-color: rgba(0, 0, 0, 0.12);
+    }
+}
