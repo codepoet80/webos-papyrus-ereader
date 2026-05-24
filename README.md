@@ -7,14 +7,17 @@ Papyrus combines the polished Enyo UI of the Kindle Beta app with the pure-JavaS
 ## Features
 
 - Clean, intuitive reading interface
-- Import ePub files from your device
+- Import ePub files from your device (multi-select supported)
 - Adjustable font size and typeface (Georgia or Verdana)
 - Reading themes: White, Sepia, and Night mode
-- Automatic reading position saving
+- Automatic reading position saving and restoration
 - Bookmark pages with the dog-ear button
-- Multi-select file import
+- Table of Contents panel
+- Search within book
 - Touch navigation (tap left/right edges to turn pages)
-- PWA install support (iOS Safari, desktop browsers)
+- Optional hardware volume button page turning
+- Reading position sync across devices via WebDAV
+- PWA install support (iOS Safari, desktop browsers) — works fully offline
 
 ## Installation
 
@@ -41,8 +44,8 @@ Once installed, the app works fully offline.
 git clone https://github.com/codepoet80/webos-papyrus-ereader.git
 cd webos-papyrus-ereader
 
-# Build and install
-palm-package com.palm.codepoet.papyrus
+# Build and install (webOS)
+palm-package app
 palm-install com.palm.codepoet.papyrus_*.ipk
 ```
 
@@ -56,16 +59,31 @@ palm-install com.palm.codepoet.papyrus_*.ipk
 
 ### Reading Controls
 
-- **Tap left edge** (30%) - Previous page
-- **Tap right edge** (30%) - Next page
-- **Tap center** (40%) - Toggle toolbar
-- **Dog-ear icon** - Bookmark current page
+- **Tap left edge** (30%) — Previous page
+- **Tap right edge** (30%) — Next page
+- **Tap center** (40%) — Toggle toolbar
+- **Dog-ear icon** — Bookmark current page
 
 ### Settings
 
 Access settings from the app menu to configure:
-- Basic Reading Mode (disables page turn animations)
-- Other display preferences
+
+- **Basic Reading Mode** — disables page turn animations for faster navigation
+- **Theme** — White, Sepia, or Night (black background)
+- **Font size and typeface** — four sizes, Georgia or Verdana
+- **Volume buttons turn pages** — use hardware volume keys to page forward/back while reading
+- **Sync** — WebDAV URL, username, and password for cross-device position sync
+
+### Reading Position Sync
+
+Papyrus can sync your reading position across devices (webOS, iOS, desktop) using any WebDAV server — Nextcloud, ownCloud, a self-hosted nginx share, etc.
+
+1. Open **Settings** from the app menu
+2. Enable sync and enter your WebDAV URL, username, and password
+3. Tap **Test Connection** to verify
+4. Use **Sync Now** from the app menu to push or pull your position manually
+
+Sync uses the ePub's built-in unique identifier (ISBN or UUID) as the sync key when available, so the same book syncs correctly regardless of filename or device.
 
 ## Credits
 
@@ -75,7 +93,7 @@ Papyrus stands on the shoulders of two excellent webOS applications:
 The beautiful Enyo-based user interface comes from Amazon's Kindle Beta app for webOS. While the original app required Amazon's proprietary backend services (which are no longer available), its thoughtful UI design lives on in Papyrus.
 
 ### pReader
-The ePub parsing and rendering engine is adapted from [pReader](http://www.ohloh.net/p/preader) by mhw. This pure-JavaScript implementation handles:
+The ePub parsing and rendering engine is adapted from pReader by mhw. This pure-JavaScript implementation handles:
 - ePub/ZIP file parsing
 - HTML content chunking and storage
 - Page fitting and pagination
@@ -88,6 +106,7 @@ pReader's open-source engine made it possible to replace the Kindle app's propri
 - **Framework**: Enyo 1.0 (webOS)
 - **Storage**: WebSQL for book content, localStorage for library metadata and settings
 - **Supported Format**: ePub (DRM-free)
+- **Sync**: WebDAV (PUT/GET/MKCOL with Basic auth)
 - **Platforms**: HP TouchPad (webOS), iOS Safari (PWA), modern desktop browsers (PWA)
 
 ## Known Limitations

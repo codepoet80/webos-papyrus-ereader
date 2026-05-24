@@ -372,6 +372,70 @@ navigator.serviceWorker.register('serviceworker.js', { updateViaCache: 'none' })
 
 **Status:** Fix is in place for Android Chrome. Safari shows the same ~5% shrink — investigation deferred. Check whether any other element in the toolbar stack lacks `box-sizing: border-box` before looking elsewhere.
 
+### 17. Popup Menus Disappearing Immediately on Chrome / iOS Safari (`enyo-build.js`, `BookReader.js`)
+
+**Problem:** Reader toolbar overlays and FontBox popups appeared for a split second and then immediately dismissed on Chrome 56+ and iOS Safari 15.4+. The app menu was also broken (tapping it did nothing) when an earlier fix using `{passive: false}` was attempted.
+
+**Root cause:** Two things interact:
+1. Chrome 56+ and iOS Safari 15.4+ treat `document.ontouchstart = fn` as a passive listener, so `preventDefault()` inside `iphoneGesture.touchend` is silently ignored. The browser fires its own native (`isTrusted = true`) `mousedown` + `click` events *in addition to* Enyo's synthetic ones from the same touch.
+2. `BasicPopup.mousedownHandler` sets `_didOpenMousedown = true` on every mousedown — including the duplicate native one. When the native `click` then fires, `processClick` closes the popup immediately.
+
+**What was tried and reverted:** Setting `{passive: false}` on the `ontouchstart` listener in `iphoneGesture.connect()` suppressed all native click events, breaking the app menu's `addEventListener('click', ...)` handler entirely.
+
+**Fix applied (`enyo-build.js`):**
+
+*1. Stamp a timestamp on each synthetic event in `iphoneGesture.touchend`:*
+```javascript
+touchend: function(a) {
+    this._lastSyntheticTime = Date.now();
+    this._send("mouseup", a.changedTouches[0]);
+    this._send("click", a.changedTouches[0]);
+},
+```
+
+*2. In `BasicPopup.mousedownHandler`, skip `_didOpenMousedown` when the event is a native duplicate of a recent synthetic:*
+```javascript
+mousedownHandler: function(a, b) {
+    var isDuplicate = b.isTrusted && enyo.iphoneGesture &&
+        enyo.iphoneGesture._lastSyntheticTime &&
+        (Date.now() - enyo.iphoneGesture._lastSyntheticTime < 500);
+    if (!isDuplicate) this._didOpenMousedown = true;
+    return this.modal && !b.dispatchTarget.isDescendantOf(this) && b.preventDefault(),
+           this.fire("onmousedown", b);
+},
+```
+
+*3. In `BookReader.handleMouseDown`, same isTrusted + timestamp guard prevents the toolbar overlay from toggling twice per tap:*
+```javascript
+handleMouseDown: function(inSender, inEvent) {
+    if (inEvent && inEvent.isTrusted && typeof enyo !== 'undefined' &&
+        enyo.iphoneGesture && enyo.iphoneGesture._lastSyntheticTime &&
+        (Date.now() - enyo.iphoneGesture._lastSyntheticTime < 500)) {
+        return;
+    }
+    // ... rest of handler ...
+},
+```
+
+**Key insight:** `isTrusted === true` identifies native browser events; Enyo synthetic events are plain objects with `isTrusted === undefined`. The 500ms window handles any realistic tap duration.
+
+### 18. WebDAV Sync Reliability — 423 Locked and Status-0 Retries (`SyncManager.js`, `Main.js`)
+
+**Problem 1 — HTTP 423 Locked:** WebDAV PUT returned 423 when the ownCloud desktop client held a lock on the sync file or directory. The error surfaced as a generic "Sync error (HTTP 423)" with no guidance. Worse, the lock persists even after deleting the sync file because ownCloud stores locks in its database, not in the file.
+
+**Fix:** `pushPosition` now uses an inner `handlePutStatus(status, isRetry)` handler. On 423 (and not already a retry), it waits 3 seconds and retries once — enough time for a transient desktop-client lock to clear. If the retry also fails it reports the error. `Main.js` shows a specific message: *"Sync file is locked by another app. Wait a moment and try again."*
+
+**Problem 2 — Status 0 on first Sync Now for a never-synced book:** The first manual sync on a brand-new book failed with "Cannot reach sync server" but succeeded on the second tap. `pullPosition` already had a 2-second status-0 retry (for cold TLS handshakes on webOS), but `pushPosition` gave up immediately on status 0. The CORS OPTIONS preflight for the PUT can fail on first connection, returning status 0 to JS.
+
+**Fix:** `pushPosition` now also retries on status 0 (same 2-second delay, same once-only guard via `isRetry`). Both 423 and status-0 retries share the `isRetry` flag so at most one retry ever fires regardless of which condition triggers first.
+
+**Error messages added to `Main.js` `syncNow`:**
+```javascript
+var errMsg = pushStatus === 0   ? "Could not reach sync server." :
+             pushStatus === 423 ? "Sync file is locked by another app.\nWait a moment and try again." :
+                                  "Sync error (HTTP " + pushStatus + ").";
+```
+
 ---
 
 ## Implementation Status
@@ -398,6 +462,8 @@ navigator.serviceWorker.register('serviceworker.js', { updateViaCache: 'none' })
 - [x] ePub `dc:identifier`-based sync key (cross-platform consistent)
 - [x] Namespace-aware ePub metadata parsing (multi-title disambiguation)
 - [x] Service worker self-caching fix (iOS) + HTTP cache fix (all browsers)
+- [x] Popup menus stay open on Chrome / iOS Safari (isTrusted duplicate-event filter)
+- [x] WebDAV sync reliability: 423-locked retry + status-0 retry for push
 
 ### Not Yet Implemented
 - [ ] Location slider navigation
