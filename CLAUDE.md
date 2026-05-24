@@ -309,6 +309,51 @@ At browser widths ≤499px (single-view / phone mode), the layout breaks: librar
 - Called at the top of `handleFilePicked()` and `importMultipleEpubs()` so the overlay is always dismissed whether or not files were selected.
 - Duck-typed File object check (`.name` is a string) instead of `instanceof Blob` — some iOS versions fail the realm check even for valid File objects.
 
+### 13. ePub Metadata Parsing — Namespace and Multi-Title (`EpubReader.js`)
+
+**Problem:** `getElementsByTagName("title")` is namespace-fragile. In OPF XML, the element is `<dc:title>` (qualified name `dc:title`, local name `title`). Strict XML parsers (some older Android WebViews) return nothing for a plain-name lookup. Additionally, ePubs for series books often have multiple `<dc:title>` elements — e.g. `<dc:title>Star Trek</dc:title>` (series) followed by `<dc:title>Star Trek Picard: 01 The Last Best Hope</dc:title>` (main). `[0]` always picked the series title.
+
+**Fix:** Use `getElementsByTagNameNS(DC_NS, "title")` with fallbacks; prefer the element tagged `title-type="main"` via ePub3 `<meta refines>`, skip `"collection"` and `"subtitle"` types, fall back to longest remaining title. Same namespace-aware treatment applied to `dc:creator`, `dc:language`, and the new `dc:identifier` extraction.
+
+**Scope:** Affects all platforms (confirmed broken on webOS, old Android, new Android — not iOS-specific).
+
+### 14. ePub `dc:identifier` as Sync Key (`SyncManager.js`, `BookData.js`, `EpubReader.js`)
+
+**Problem:** Sync keys derived from title+author slug were inconsistent across platforms because metadata quality varies: webOS OPF parser, old Android WebView, and new Chrome all produced different titles for the same book, giving different filenames on the WebDAV server.
+
+**Fix:** Extract the ePub's `dc:identifier` (referenced by `<package unique-identifier="...">`) at import time and store it in `BookData.epubIdentifier`. `SyncManager.makeSyncKey(title, author, identifier)` uses the identifier as the primary key (e.g. `urn:isbn:9780062892058` → `isbn_9780062892058`); falls back to the old title+author slug when identifier is null. `pullPosition` retries with the legacy key on 404 for backward compatibility with existing sync files.
+
+**Note:** Books imported before v1.3.0 have `epubIdentifier = null` and continue to use the title+author key. Re-importing a book on any device will populate the identifier going forward.
+
+### 15. Service Worker Update Cycle — Self-Caching and HTTP Cache
+
+Two failure modes that permanently lock clients to old code:
+
+**SW self-caching (iOS Safari bug):** iOS routes the SW update check through the active SW's fetch handler. If `serviceworker.js` is in the SW cache, the old SW serves itself to the browser's update check and no update is ever detected.
+
+**Fix in `serviceworker.js` fetch handler:**
+```javascript
+if (url.pathname.endsWith('/serviceworker.js')) return; // never cache self
+```
+
+**HTTP cache (all browsers):** Chrome/Firefox bypass the SW handler for update checks but still respect HTTP `Cache-Control`. If nginx serves `serviceworker.js` with any `max-age`, browsers cache it at the HTTP layer and the update check never reaches the server — even in incognito.
+
+**Fix in nginx** (Papyrus server block):
+```nginx
+location = /serviceworker.js {
+    add_header Cache-Control "no-store, no-cache, must-revalidate";
+    add_header Pragma "no-cache";
+    try_files $uri =404;
+}
+```
+
+**Fix in `index.html`:**
+```javascript
+navigator.serviceWorker.register('serviceworker.js', { updateViaCache: 'none' })
+```
+
+**Deploy checklist:** Bump `CACHE_NAME` in `serviceworker.js` AND the build string in `Main.js` together on every deploy. The build string is the only visible proof of which version clients are actually running.
+
 ---
 
 ## Implementation Status
@@ -332,6 +377,9 @@ At browser widths ≤499px (single-view / phone mode), the layout breaks: librar
 - [x] FileMgr integration for reliable file import
 - [x] iOS Safari file import (viewport-fit fix + overlay cleanup)
 - [x] PWA install support
+- [x] ePub `dc:identifier`-based sync key (cross-platform consistent)
+- [x] Namespace-aware ePub metadata parsing (multi-title disambiguation)
+- [x] Service worker self-caching fix (iOS) + HTTP cache fix (all browsers)
 
 ### Not Yet Implemented
 - [ ] Location slider navigation
