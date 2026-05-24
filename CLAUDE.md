@@ -354,6 +354,24 @@ navigator.serviceWorker.register('serviceworker.js', { updateViaCache: 'none' })
 
 **Deploy checklist:** Bump `CACHE_NAME` in `serviceworker.js` AND the build string in `Main.js` together on every deploy. The build string is the only visible proof of which version clients are actually running.
 
+### 16. Reader Toolbar — Layout Shrink When Controls Appear (`BookReader.css`)
+
+**Problem:** On Android Chrome (confirmed) and Safari (observed, fix pending), when the reader toolbar is shown the entire page content shrinks ~5%. Hiding the controls restores full size. The effect is a jarring reflow every time the user taps to show/hide the toolbar.
+
+**Root cause:** `.bottom-row-controls` was missing `box-sizing: border-box`. Its 15px horizontal padding created overflow beyond the declared width, triggering the browser's "layout is wider than viewport" detection. The browser responded by shrinking the layout viewport to fit — the same mechanism that makes pages zoom out when content overflows on mobile.
+
+**Fix already applied (`BookReader.css` line ~91, commit `60adc2c`):**
+```css
+.bottom-row-controls {
+    box-sizing: border-box;   /* padding stays inside declared width; no overflow */
+    ...
+}
+```
+
+**Resize handler (`BookReader.js`):** The resize handler was also updated to ignore height-only changes (URL bar appearing/disappearing on mobile scroll) by comparing `window.innerWidth` on successive resize events — prevents spurious page reflows when the browser chrome toggles.
+
+**Status:** Fix is in place for Android Chrome. Safari shows the same ~5% shrink — investigation deferred. Check whether any other element in the toolbar stack lacks `box-sizing: border-box` before looking elsewhere.
+
 ---
 
 ## Implementation Status
