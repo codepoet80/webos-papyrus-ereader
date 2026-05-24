@@ -1065,10 +1065,15 @@ enyo.kind({
 
 		PapyrusSyncManager.pushPosition(this.currentBook.title, this.currentBook.author, this.currentBook.epubIdentifier || null, localPos);
 
-		PapyrusSyncManager.pullPosition(this.currentBook.title, this.currentBook.author, this.currentBook.epubIdentifier || null, function(remote) {
+		PapyrusSyncManager.pullPosition(this.currentBook.title, this.currentBook.author, this.currentBook.epubIdentifier || null, function(remote, pullStatus) {
 			if (!remote) {
-				self.log("Sync: manual pull got no data");
-				self.showSyncStatus("Could not reach sync server.");
+				self.log("Sync: manual pull got no data (status=" + pullStatus + ")");
+				// 404 → no sync file exists yet for this book (normal first-sync state)
+				// 0   → network or CORS failure (actual connectivity problem)
+				var msg = (pullStatus === 404)
+					? "No sync data found for this book yet."
+					: (pullStatus === 0 ? "Could not reach sync server." : "Sync error (HTTP " + pullStatus + ").");
+				self.showSyncStatus(msg);
 				return;
 			}
 			self.log("Sync: manual pull remote position=" + remote.position + " local=" + localPos);

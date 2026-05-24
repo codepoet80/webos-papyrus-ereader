@@ -222,13 +222,17 @@ var PapyrusSyncManager = {
                     callback(null);
                 }
             } else if (status === 404 && legacyKey && legacyKey !== syncKey) {
-                // Primary key not found — try the old title+author key once (no retry on legacy)
-                console.log("Sync: primary key 404, trying legacy key=" + legacyKey);
+                // Primary key not found — try the old title+author key once (no retry on legacy).
+                // Capture the key BEFORE zeroing legacyKey (the guard that prevents re-entry).
+                var keyToRetry = legacyKey;
                 legacyKey = null; // prevent infinite loop
-                doGet(legacyKey, false, handleResult);
+                console.log("Sync: primary key 404, trying legacy key=" + keyToRetry);
+                doGet(keyToRetry, false, handleResult);
             } else {
+                // Pass the HTTP status to the caller so it can show a precise message:
+                // status=0 → network/CORS failure; status=404 → no sync file yet (not an error).
                 console.log("Sync: pull returning null (status=" + status + ")");
-                callback(null);
+                callback(null, status);
             }
         };
 
