@@ -1049,6 +1049,11 @@ enyo.kind({
 	},
 
 	syncNow: function() {
+		// Guard against duplicate invocations from the same tap (iOS/Chrome fire both
+		// a synthetic Enyo event and a native isTrusted click, which would start two
+		// independent pull→push cycles and show the success popup twice).
+		if (this._syncInProgress) return;
+
 		var settings = PapyrusSyncManager.getSettings();
 		if (!settings.syncEnabled) {
 			this.showSyncStatus("Sync is not enabled.\nEnable it in Settings.");
@@ -1059,6 +1064,7 @@ enyo.kind({
 			return;
 		}
 
+		this._syncInProgress = true;
 		var self = this;
 		var book = this.currentBook;
 		var localPos = book.locationsCompleted || 0;
@@ -1080,6 +1086,7 @@ enyo.kind({
 
 			// Step 2: always push (creates file on first sync, updates on subsequent)
 			PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, positionToSave, [], function(ok, pushStatus) {
+				self._syncInProgress = false;
 				if (!ok) {
 					var errMsg = pushStatus === 0   ? "Could not reach sync server." :
 					             pushStatus === 423 ? "Sync file is locked by another app.\nWait a moment and try again." :
