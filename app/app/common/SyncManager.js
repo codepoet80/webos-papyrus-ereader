@@ -130,13 +130,15 @@ var PapyrusSyncManager = {
         xhr.send(payload);
     },
 
-    // Push current position (and optional bookmarks array) to WebDAV. Fire-and-forget.
-    // Tries PUT directly; only falls back to MKCOL+retry if the directory is missing (409).
+    // Push current position (and optional bookmarks array) to WebDAV.
+    // Calls onDone(true) on success, onDone(false, status) on failure.
+    // onDone is optional — omit for fire-and-forget behaviour.
     // identifier: the ePub's dc:identifier value (preferred sync key); pass null to use title+author.
-    pushPosition: function(title, author, identifier, position, bookmarks) {
+    pushPosition: function(title, author, identifier, position, bookmarks, onDone) {
         var settings = this.getSettings();
         if (!settings.syncEnabled || !settings.syncUrl) {
             console.log("Sync: push skipped (disabled or no URL)");
+            if (onDone) onDone(false, 0);
             return;
         }
 
@@ -160,14 +162,24 @@ var PapyrusSyncManager = {
                 self._ensureDirectory(settings, function(ok) {
                     if (!ok) {
                         console.log("Sync: push aborted, could not create directory");
+                        if (onDone) onDone(false, 409);
                         return;
                     }
-                    self._doPut(settings, fileUrl, payload, null);
+                    self._doPut(settings, fileUrl, payload, function(retryStatus) {
+                        var ok2 = retryStatus >= 200 && retryStatus < 300;
+                        console.log("Sync: push retry status=" + retryStatus + " ok=" + ok2);
+                        if (onDone) onDone(ok2, retryStatus);
+                    });
                 });
             } else if (status === 0) {
                 console.log("Sync: push failed (network/CORS error)");
+                if (onDone) onDone(false, 0);
             } else if (status < 200 || status >= 300) {
                 console.log("Sync: push failed with status=" + status);
+                if (onDone) onDone(false, status);
+            } else {
+                console.log("Sync: push succeeded status=" + status);
+                if (onDone) onDone(true, status);
             }
         });
     },

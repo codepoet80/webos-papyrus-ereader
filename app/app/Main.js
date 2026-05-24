@@ -1060,31 +1060,39 @@ enyo.kind({
 		}
 
 		var self = this;
-		var localPos = this.currentBook.locationsCompleted || 0;
+		var book = this.currentBook;
+		var localPos = book.locationsCompleted || 0;
 		this.log("Sync: manual sync started, local position=" + localPos);
 
-		PapyrusSyncManager.pushPosition(this.currentBook.title, this.currentBook.author, this.currentBook.epubIdentifier || null, localPos);
+		// Step 1: pull first so we can compare before overwriting
+		PapyrusSyncManager.pullPosition(book.title, book.author, book.epubIdentifier || null, function(remote) {
+			var positionToSave = localPos;
 
-		PapyrusSyncManager.pullPosition(this.currentBook.title, this.currentBook.author, this.currentBook.epubIdentifier || null, function(remote, pullStatus) {
-			if (!remote) {
-				self.log("Sync: manual pull got no data (status=" + pullStatus + ")");
-				// 404 → no sync file exists yet for this book (normal first-sync state)
-				// 0   → network or CORS failure (actual connectivity problem)
-				var msg = (pullStatus === 404)
-					? "No sync data found for this book yet."
-					: (pullStatus === 0 ? "Could not reach sync server." : "Sync error (HTTP " + pullStatus + ").");
-				self.showSyncStatus(msg);
-				return;
-			}
-			self.log("Sync: manual pull remote position=" + remote.position + " local=" + localPos);
-			if (remote.position > localPos) {
-				self.log("Sync: jumping to remote position " + remote.position);
+			if (remote && typeof remote.position === 'number' && remote.position > localPos) {
+				self.log("Sync: remote position " + remote.position + " is ahead — jumping");
 				self.$.reader.goToLocation(remote.position);
-				enyo.windows.addBannerMessage("Sync: jumped to " + Math.round(remote.position / 100) + "%", "{}", "icon.png");
+				positionToSave = remote.position;
+			} else if (remote) {
+				self.log("Sync: local position " + localPos + " is current");
 			} else {
-				self.log("Sync: local position is most recent");
-				enyo.windows.addBannerMessage("Sync: your position is up to date", "{}", "icon.png");
+				self.log("Sync: no remote data yet — will create sync file");
 			}
+
+			// Step 2: always push (creates file on first sync, updates on subsequent)
+			PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, positionToSave, [], function(ok, pushStatus) {
+				if (!ok) {
+					var errMsg = pushStatus === 0 ? "Could not reach sync server." : "Sync error (HTTP " + pushStatus + ").";
+					self.log("Sync: push failed — " + errMsg);
+					self.showSyncStatus(errMsg);
+					return;
+				}
+				// Show result
+				if (remote && remote.position > localPos) {
+					self.showSyncStatus("Jumped to further position\nfrom another device.");
+				} else {
+					self.showSyncStatus("Position synced!");
+				}
+			});
 		});
 	},
 
