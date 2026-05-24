@@ -264,24 +264,81 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 		title: null,
 		creator: null,
 		language: null,
+		identifier: null,
 		chapters: new Array(),
 		images: new Array()
 	}
 	
 	//Fetching the title, creator and language
-	var tag = xmlDoc.getElementsByTagName("title")[0];
-	if (tag != null && tag.firstChild != null) {
-		data.title = tag.firstChild.nodeValue;
+	// Use namespace-aware lookup (dc:title) with plain-name fallback for older parsers.
+	// When multiple dc:title elements exist (ePub3 series/collection pattern), prefer
+	// the one tagged title-type="main" via <meta refines>; skip "collection"/"subtitle"
+	// types; otherwise pick the longest remaining title (series slugs are short).
+	var DC_NS = "http://purl.org/dc/elements/1.1/";
+	var _getTags = function(ns, local, fallback) {
+		var tags = xmlDoc.getElementsByTagNameNS(ns, local);
+		if (!tags || tags.length === 0) tags = xmlDoc.getElementsByTagName("dc:" + local);
+		if (!tags || tags.length === 0) tags = xmlDoc.getElementsByTagName(fallback || local);
+		return tags || [];
+	};
+
+	var titleTags = _getTags(DC_NS, "title");
+	if (titleTags.length > 0) {
+		// Build id → title-type map from ePub3 <meta refines> elements
+		var titleTypeById = {};
+		var metas = xmlDoc.getElementsByTagName("meta");
+		for (var mi = 0; mi < metas.length; mi++) {
+			var refines  = metas[mi].getAttribute("refines");
+			var property = metas[mi].getAttribute("property");
+			if (refines && property === "title-type" && metas[mi].firstChild) {
+				titleTypeById[refines.replace(/^#/, "")] = metas[mi].firstChild.nodeValue;
+			}
+		}
+		var bestTitle = null, longestTitle = null;
+		for (var ti = 0; ti < titleTags.length; ti++) {
+			var tt = titleTags[ti];
+			if (!tt.firstChild || !tt.firstChild.nodeValue) continue;
+			var tv = tt.firstChild.nodeValue;
+			var ttype = titleTypeById[tt.getAttribute("id") || ""] || "";
+			if (ttype === "main")                             { bestTitle = tv; break; }
+			if (ttype === "collection" || ttype === "subtitle") continue;
+			if (!longestTitle || tv.length > longestTitle.length) longestTitle = tv;
+		}
+		data.title = bestTitle || longestTitle;
 	}
-	var tag = xmlDoc.getElementsByTagName("creator")[0];
-	if (tag != null && tag.firstChild != null) {
-		data.creator = tag.firstChild.nodeValue;
+
+	var creatorTags = _getTags(DC_NS, "creator");
+	var creatorTag = creatorTags[0] || null;
+	if (creatorTag != null && creatorTag.firstChild != null) {
+		data.creator = creatorTag.firstChild.nodeValue;
 	}
-	tag = xmlDoc.getElementsByTagName("language")[0];
+	var langTags = _getTags(DC_NS, "language");
+	var tag = langTags[0] || null;
 	if (tag != null && tag.firstChild != null) {
 		data.language = tag.firstChild.nodeValue;
 	}
-	
+
+	// Extract ePub unique-identifier (dc:identifier referenced by <package unique-identifier="...">).
+	// Cannot use getElementById on XML without a DTD — walk dc:identifier elements by id attribute.
+	var packageEl = xmlDoc.getElementsByTagName("package")[0];
+	var uniqueIdRef = packageEl ? packageEl.getAttribute("unique-identifier") : null;
+	if (uniqueIdRef) {
+		var idTags = _getTags(DC_NS, "identifier");
+		for (var ii = 0; ii < idTags.length; ii++) {
+			if (idTags[ii].getAttribute("id") === uniqueIdRef && idTags[ii].firstChild) {
+				data.identifier = idTags[ii].firstChild.nodeValue;
+				break;
+			}
+		}
+	}
+	// Fallback: first dc:identifier regardless of unique-identifier reference
+	if (!data.identifier) {
+		var idTags2 = _getTags(DC_NS, "identifier");
+		if (idTags2 && idTags2.length > 0 && idTags2[0].firstChild) {
+			data.identifier = idTags2[0].firstChild.nodeValue;
+		}
+	}
+
 	//Now, we check if there's a spine TOC that rearranges the chapters
 	var spine = xmlDoc.getElementsByTagName("spine");
 	var spineOrder = new Array();
@@ -724,10 +781,11 @@ EpubReader.prototype.getMetadata = function() {
 	}
 	var rf = this.structure.rfData[0];
 	var metadata = {
-		title : rf.title,
-		author : rf.creator,
-		language : rf.language,
-		publisher : rf.publisher
+		title      : rf.title,
+		author     : rf.creator,
+		language   : rf.language,
+		publisher  : rf.publisher,
+		identifier : rf.identifier
 	}
 	return metadata;
 }

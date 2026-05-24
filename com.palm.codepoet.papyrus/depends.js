@@ -79,7 +79,7 @@ enyo.depends(
 	"app/libraryNavigator/LibraryNavigator.css",
 
 	// Application - Panels
-	"app/panels/KindlePanels.js",
+	"app/panels/ReaderPanel.js",
 	"app/panels/SlideoutPanel.js",
 	"app/panels/panels.css",
 

@@ -1063,9 +1063,9 @@ enyo.kind({
 		var localPos = this.currentBook.locationsCompleted || 0;
 		this.log("Sync: manual sync started, local position=" + localPos);
 
-		PapyrusSyncManager.pushPosition(this.currentBook.title, this.currentBook.author, localPos);
+		PapyrusSyncManager.pushPosition(this.currentBook.title, this.currentBook.author, this.currentBook.epubIdentifier || null, localPos);
 
-		PapyrusSyncManager.pullPosition(this.currentBook.title, this.currentBook.author, function(remote) {
+		PapyrusSyncManager.pullPosition(this.currentBook.title, this.currentBook.author, this.currentBook.epubIdentifier || null, function(remote) {
 			if (!remote) {
 				self.log("Sync: manual pull got no data");
 				self.showSyncStatus("Could not reach sync server.");

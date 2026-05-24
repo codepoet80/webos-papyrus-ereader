@@ -282,7 +282,7 @@ enyo.kind({
 		var self = this;
 		var localPos = this.bookData.locationsCompleted || 0;
 		this.log("Sync: auto-pull on book open, local position=" + localPos);
-		PapyrusSyncManager.pullPosition(this.bookData.title, this.bookData.author, function(remote) {
+		PapyrusSyncManager.pullPosition(this.bookData.title, this.bookData.author, this.bookData.epubIdentifier || null, function(remote) {
 			if (!remote || typeof remote.position !== 'number') {
 				self.log("Sync: auto-pull got no data, staying at local position");
 				return;
@@ -498,7 +498,7 @@ enyo.kind({
 			} catch (e) {}
 
 			// Push to WebDAV sync (fire and forget)
-			PapyrusSyncManager.pushPosition(this.bookData.title, this.bookData.author, this.currentLocStart, this.getBookmarksForSync());
+			PapyrusSyncManager.pushPosition(this.bookData.title, this.bookData.author, this.bookData.epubIdentifier || null, this.currentLocStart, this.getBookmarksForSync());
 		}
 	},
 

@@ -179,7 +179,7 @@ in `ViewBase.js` and `BookItems.css`.
 
 **Phone / portrait layout** also done: `PeekingSlider` custom kind keeps 64px of
 the content panel peeking from the right edge in single-view (phone) mode; landscape
-vs. portrait detection drives `showLandscapeView`/`showPortraitView` in `KindlePanels.js`.
+vs. portrait detection drives `showLandscapeView`/`showPortraitView` in `ReaderPanel.js`.
 
 **Important warning:** Do NOT add `!important` to `.enyo-hflexbox` or `.enyo-vflexbox`
 CSS rules — this breaks VFlexBox layout, causing books to become un-tappable and the

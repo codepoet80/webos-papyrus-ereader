@@ -61,7 +61,7 @@ enyo.kind({
 enyo.kind({
 	name: "ereader.panels.MainPanels",
 	kind: enyo.SlidingPane,
-	className: "kindle-panel",
+	className: "reader-panel",
 	events: {
 		onBookSelected: "",
 		onSearchQueried: "",
@@ -121,7 +121,7 @@ enyo.kind({
 		var self = this;
 		setTimeout(function() {
 			if (!self.isWideLayout() && self.view !== self.$.contentPanel) {
-				enyo.log("KindlePanels.rendered: deferred portrait correction");
+				enyo.log("ReaderPanel.rendered: deferred portrait correction");
 				self.showPortraitView(true);
 			}
 		}, 100);
@@ -205,7 +205,7 @@ enyo.kind({
 	resizeHandler: function() {
 		var wasMultiView = this.multiView;
 		this.inherited(arguments);  // SlidingPane.resizeHandler: resize() + child broadcast
-		enyo.log("KindlePanels.resizeHandler: wasMultiView=" + wasMultiView + " nowMultiView=" + this.multiView + " innerWidth=" + window.innerWidth);
+		enyo.log("ReaderPanel.resizeHandler: wasMultiView=" + wasMultiView + " nowMultiView=" + this.multiView + " innerWidth=" + window.innerWidth);
 		if (this.multiView !== wasMultiView) {
 			if (this.multiView) {
 				this.showLandscapeView(true);

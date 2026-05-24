@@ -14,6 +14,9 @@ function BookData(options) {
 	this.author = options.author || "Unknown Author";
 	this.publisher = options.publisher || "";
 	this.language = options.language || "";
+	// ePub unique-identifier from <package unique-identifier> / dc:identifier (ISBN, UUID, etc.)
+	// Used as the primary sync key — more reliable than title+author across platforms.
+	this.epubIdentifier = options.epubIdentifier || null;
 
 	// File paths
 	this.bookFilePath = options.bookFilePath || "";
@@ -95,6 +98,7 @@ BookData.prototype.toJSON = function() {
 		author: this.author,
 		publisher: this.publisher,
 		language: this.language,
+		epubIdentifier: this.epubIdentifier,
 		bookFilePath: this.bookFilePath,
 		coverImagePath: this.coverImagePath,
 		bookDbName: this.bookDbName,
@@ -144,6 +148,7 @@ BookData.fromEpubReader = function(epubReader, filePath) {
 		author: metadata.author || "",
 		publisher: metadata.publisher || "",
 		language: metadata.language || "",
+		epubIdentifier: metadata.identifier || null,
 		bookFilePath: filePath,
 		bookDbName: "ereader_" + File.extractBasename(filePath),
 		locationsCompleted: 0,

@@ -7,26 +7,39 @@
  */
 var PapyrusSyncManager = {
 
-    // Derive a stable, filesystem-safe key from title + author.
-    // The same book on any device produces the same key even when metadata
-    // quality differs (e.g. webOS has clean OPF metadata; PWA may fall back
-    // to the filename as the title and "Unknown Author" as the author).
+    // Derive a stable, filesystem-safe sync key.
     //
-    // Normalizations applied:
-    //   1. Strip leading articles (the_, a_, an_) from the slug
-    //   2. Strip trailing noise common in filename-derived metadata:
-    //      _epub, _ebook, _unknown_author, _unknown
-    makeSyncKey: function(title, author) {
+    // Primary key (when identifier is present):
+    //   The ePub's dc:identifier value (typically an ISBN or UUID), normalised
+    //   to lowercase alphanumeric+underscore.  ISBN example:
+    //     "urn:isbn:9780062892058" → "isbn_9780062892058"
+    //   This is the same in every copy of the same ePub file regardless of
+    //   device, filename, or metadata quality.
+    //
+    // Fallback key (no identifier, or identifier looks like a bare random UUID):
+    //   title + author slug, same normalisation as before.
+    makeSyncKey: function(title, author, identifier) {
+        if (identifier) {
+            var id = identifier.trim()
+                .replace(/^urn:isbn:/i,  'isbn_')
+                .replace(/^urn:uuid:/i,  'uuid_')
+                .replace(/^urn:/i,       '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, '_')
+                .replace(/_+/g, '_')
+                .replace(/^_|_$/, '');
+            if (id && id.length >= 4) return id.substring(0, 80);
+        }
+
+        // Fallback: title + author slug
         var raw = ((title || 'unknown') + '_' + (author || 'unknown'))
             .toLowerCase()
             .replace(/[^a-z0-9]/g, '_')
             .replace(/_+/g, '_')
             .replace(/^_|_$/, '');
 
-        // Strip leading article
         raw = raw.replace(/^(the|a|an)_/, '');
 
-        // Strip trailing noise iteratively (order matters: longer suffixes first)
         var noiseSuffixes = ['_unknown_author', '_unknown', '_ebook', '_epub'];
         var changed;
         do {
@@ -42,6 +55,12 @@ var PapyrusSyncManager = {
         } while (changed);
 
         return (raw.substring(0, 80)) || 'unknown_book';
+    },
+
+    // Legacy key (title+author only) — used as pull fallback for books imported
+    // before epubIdentifier was stored.
+    makeLegacySyncKey: function(title, author) {
+        return this.makeSyncKey(title, author, null);
     },
 
     getSettings: function() {
@@ -113,7 +132,8 @@ var PapyrusSyncManager = {
 
     // Push current position (and optional bookmarks array) to WebDAV. Fire-and-forget.
     // Tries PUT directly; only falls back to MKCOL+retry if the directory is missing (409).
-    pushPosition: function(title, author, position, bookmarks) {
+    // identifier: the ePub's dc:identifier value (preferred sync key); pass null to use title+author.
+    pushPosition: function(title, author, identifier, position, bookmarks) {
         var settings = this.getSettings();
         if (!settings.syncEnabled || !settings.syncUrl) {
             console.log("Sync: push skipped (disabled or no URL)");
@@ -121,7 +141,7 @@ var PapyrusSyncManager = {
         }
 
         var self = this;
-        var syncKey = this.makeSyncKey(title, author);
+        var syncKey = this.makeSyncKey(title, author, identifier);
         var fileUrl = this._fileUrl(settings, syncKey);
         var payload = JSON.stringify({
             title: title,
@@ -155,7 +175,9 @@ var PapyrusSyncManager = {
     // Pull position from WebDAV. Calls callback(data) or callback(null) if unavailable.
     // Retries once on status 0 (cold TLS handshake on webOS can time out on first attempt).
     // Only pull retries — push is fire-and-forget, so there is no concurrent retry collision.
-    pullPosition: function(title, author, callback) {
+    // identifier: the ePub's dc:identifier (preferred key). On 404, automatically retries
+    // with the legacy title+author key for backward compatibility with pre-identifier sync files.
+    pullPosition: function(title, author, identifier, callback) {
         var settings = this.getSettings();
         if (!settings.syncEnabled || !settings.syncUrl) {
             console.log("Sync: pull skipped (disabled or no URL)");
@@ -163,13 +185,15 @@ var PapyrusSyncManager = {
             return;
         }
 
-        var syncKey = this.makeSyncKey(title, author);
-        var url  = this._fileUrl(settings, syncKey);
-        var auth = this._basicAuth(settings.syncUser, settings.syncPass);
+        var self     = this;
+        var syncKey  = this.makeSyncKey(title, author, identifier);
+        var legacyKey = (identifier) ? this.makeLegacySyncKey(title, author) : null;
+        var auth     = this._basicAuth(settings.syncUser, settings.syncPass);
 
-        console.log("Sync: pull starting for key=" + syncKey);
+        console.log("Sync: pull starting for key=" + syncKey + (legacyKey ? " (legacy fallback=" + legacyKey + ")" : ""));
 
-        var attempt = function(retry) {
+        var doGet = function(key, retry, onDone) {
+            var url = self._fileUrl(settings, key);
             console.log("Sync: GET " + url + (retry ? "" : " (retry)"));
             var xhr = new XMLHttpRequest();
             xhr.open('GET', url, true);
@@ -179,26 +203,36 @@ var PapyrusSyncManager = {
                 console.log("Sync: GET status=" + xhr.status);
                 if (xhr.status === 0 && retry) {
                     console.log("Sync: GET status=0, retrying in 2s");
-                    setTimeout(function() { attempt(false); }, 2000);
+                    setTimeout(function() { doGet(key, false, onDone); }, 2000);
                     return;
                 }
-                if (xhr.status === 200 && xhr.responseText) {
-                    try {
-                        var data = JSON.parse(xhr.responseText);
-                        console.log("Sync: pull got position=" + data.position + " bookmarks=" + (data.bookmarks ? data.bookmarks.length : 0));
-                        callback(data);
-                    } catch(e) {
-                        console.log("Sync: pull JSON parse error: " + e);
-                        callback(null);
-                    }
-                } else {
-                    console.log("Sync: pull returning null (status=" + xhr.status + ")");
-                    callback(null);
-                }
+                onDone(xhr.status, xhr.responseText);
             };
             xhr.send();
         };
-        attempt(true);
+
+        var handleResult = function(status, text) {
+            if (status === 200 && text) {
+                try {
+                    var data = JSON.parse(text);
+                    console.log("Sync: pull got position=" + data.position + " bookmarks=" + (data.bookmarks ? data.bookmarks.length : 0));
+                    callback(data);
+                } catch(e) {
+                    console.log("Sync: pull JSON parse error: " + e);
+                    callback(null);
+                }
+            } else if (status === 404 && legacyKey && legacyKey !== syncKey) {
+                // Primary key not found — try the old title+author key once (no retry on legacy)
+                console.log("Sync: primary key 404, trying legacy key=" + legacyKey);
+                legacyKey = null; // prevent infinite loop
+                doGet(legacyKey, false, handleResult);
+            } else {
+                console.log("Sync: pull returning null (status=" + status + ")");
+                callback(null);
+            }
+        };
+
+        doGet(syncKey, true, handleResult);
     },
 
     // Test connection with a GET — avoids CORS preflight that PROPFIND triggers over HTTPS.

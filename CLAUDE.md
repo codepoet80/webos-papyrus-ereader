@@ -269,7 +269,7 @@ Always apply these two rules whenever Enyo 1 SlidingPane panels live inside a mo
 
 At browser widths ≤499px (single-view / phone mode), the layout breaks: library panel fills the screen and the content panel only shows a 64px sliver on the right. When the user slides the content panel into view it appears "covered by a copy of the left pane."
 
-**What was tried (all in `KindlePanels.js`):**
+**What was tried (all in `ReaderPanel.js`):**
 - `create()` calls `showPortraitView(true)` at narrow widths to pre-select content panel — in place.
 - `resizeHandler()` override detects multiView flip and calls `showPortraitView`/`showLandscapeView` — in place, with diagnostic `enyo.log`.
 - `isWideLayout()` helper for consistent width detection — in place.
@@ -284,7 +284,7 @@ At browser widths ≤499px (single-view / phone mode), the layout breaks: librar
 - `Pane._selectView()` calls `view.resized()` which triggers `broadcastMessage("resize")` → `resizeHandler()` on the view. This fires our override.
 
 **Root cause not identified.** Static code analysis shows the logic should work, but the user consistently sees the library panel selected at 405px. The `resizeHandler` diagnostic log was added but console output was never obtained. Possible causes not ruled out:
-- Service worker cache-first strategy serving stale `KindlePanels.js` despite cache name bump.
+- Service worker cache-first strategy serving stale `ReaderPanel.js` despite cache name bump.
 - `SlidingPane.resizeHandler`'s height guard (`getBounds().height`) returning 0 at the time the handler fires, so `resize(!0)` is never called and `this.multiView` never changes.
 - Something in the `Pane.transitionView` / `transitionDone` / `setShowing` sequence resetting the selected view after our logic runs.
 - The "covered by copy of left pane" visual may simply be both panels having the same `library-background.png` — the content panel IS on top (DOM order) but its ContentNavigator shows an empty state that looks identical to the library background.
