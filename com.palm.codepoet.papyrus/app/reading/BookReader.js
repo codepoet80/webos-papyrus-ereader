@@ -503,13 +503,12 @@ enyo.kind({
 	},
 
 	handleMouseDown: function(inSender, inEvent) {
-		// Debounce: on Android Chrome, document.ontouchstart is registered as a
-		// passive listener (Chrome 56+), so iphoneGesture's a.preventDefault()
-		// call is silently ignored.  The browser then fires its own synthetic
-		// mousedown alongside Enyo's, causing this handler to run twice per tap —
-		// once to show overlays and once to hide them.  Two events from the same
-		// physical tap arrive within ~1-5ms; 300ms catches the duplicate while
-		// still allowing normal rapid tapping.
+		// Safety-net debounce: the root fix is in iphoneGesture.connect() in
+		// enyo-build.js, which now registers touchstart with {passive:false} so
+		// preventDefault() suppresses the browser's native mouse-event synthesis
+		// on Chrome 56+ and iOS Safari 15.4+.  This guard is kept as a belt-and-
+		// suspenders fallback in case a browser still fires a duplicate mousedown
+		// within the same physical tap (two events from one tap arrive ~1–5ms apart).
 		var now = Date.now();
 		if (this._lastMouseDownTime !== undefined && (now - this._lastMouseDownTime) < 300) {
 			return;

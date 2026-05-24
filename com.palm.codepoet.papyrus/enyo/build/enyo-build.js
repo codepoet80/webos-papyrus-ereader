@@ -2699,7 +2699,17 @@ touchend: function(a) {
 this._send("mouseup", a.changedTouches[0]), this._send("click", a.changedTouches[0]);
 },
 connect: function() {
-document.ontouchstart = enyo.dispatch, document.ontouchmove = enyo.dispatch, document.ontouchend = enyo.dispatch;
+// Modern Chrome (56+) and iOS Safari (15.4+) treat document.ontouchstart
+// as a passive listener, so iphoneGesture's preventDefault() call is a
+// no-op.  The browser then fires its own synthetic mousedown+click events
+// in addition to Enyo's, causing popups to close immediately and overlays
+// to flash.  Using addEventListener with {passive:false} opts out of the
+// passive default so preventDefault() suppresses the native events.
+// This code only runs on non-webOS platforms (see outer PalmSystem guard).
+var nonPassive = {passive: false};
+document.addEventListener('touchstart', enyo.dispatch, nonPassive);
+document.addEventListener('touchmove', enyo.dispatch, nonPassive);
+document.addEventListener('touchend', enyo.dispatch, false);
 }
 }, enyo.iphoneGesture.connect());
 });
