@@ -6,7 +6,7 @@
 1. **Kindle Beta app** (`com.palm.app.kindle`) - Beautiful Enyo-based UI
 2. **pReader app** (`com.mhwsoft.preader`) - Working pure-JavaScript ePub engine
 
-The result is a fully functional e-reader for the HP TouchPad and other webOS devices.
+The result is a fully functional e-reader for the HP TouchPad and other webOS devices, and also runs as a PWA on iOS Safari and modern desktop browsers.
 
 ---
 
@@ -33,6 +33,8 @@ The app is fully functional and ready for community testing.
 - Auto-skip blank pages
 - About dialog with app info
 - WOSA Updater integration for update notifications
+- PWA install support (iOS Safari, desktop browsers)
+- ePub file import working on iOS Safari PWA
 
 ### Known Limitations
 - Highlights/annotations UI not fully implemented
@@ -289,6 +291,24 @@ At browser widths ≤499px (single-view / phone mode), the layout breaks: librar
 
 **Do NOT retry** by adjusting `showPortraitView` or `resizeHandler` calls — two sessions have been spent here with no result. A fresh approach would require: (a) obtaining the `enyo.log` console output to verify whether `resizeHandler` fires and whether `wasMultiView !== this.multiView`, and (b) using browser DevTools to inspect the actual DOM transforms and `this.view.name` at runtime.
 
+### 12. iOS Safari File Import (`viewport-fit=cover` breaks the file picker)
+
+**Problem:** Adding `viewport-fit=cover` to the viewport meta tag (done for safe-area insets on notched devices) caused iOS Safari to stop routing the native file picker result back to off-screen `<input type="file">` elements. The `change` event never fired, so imports silently failed.
+
+**Root fix** (`index.html`): Removed `viewport-fit=cover`. The viewport meta reverts to `width=device-width, initial-scale=1.0`.
+
+**Why the toolbar still clears the gesture area:** `BookReader.css` already uses `max(env(safe-area-inset-bottom), 20px)` for the toolbar bottom offset. Without `viewport-fit=cover`, `env()` returns 0 and the `20px` floor keeps the toolbar above the system gesture zone. No visual regression.
+
+**Supporting changes (`webos-compat.js`):**
+- Hidden file `<input>` uses `opacity:0` (not `display:none` or `visibility:hidden`) — iOS suppresses `change` on invisible inputs, but opacity:0 is safe.
+- Simple `change` + `input` event listeners (no focus-poll fallback needed once `viewport-fit=cover` is removed).
+- iOS overlay gets a stable DOM id (`papyrus-ios-picker-overlay`) and a global close handle (`window.__papyrusCloseIOSPickerOverlay`) so `Main.js` can dismiss it reliably.
+
+**Supporting changes (`Main.js`):**
+- `dismissIOSPickerOverlay()` helper: closes via the global handle AND via DOM id lookup as a belt-and-suspenders fallback.
+- Called at the top of `handleFilePicked()` and `importMultipleEpubs()` so the overlay is always dismissed whether or not files were selected.
+- Duck-typed File object check (`.name` is a string) instead of `instanceof Blob` — some iOS versions fail the realm check even for valid File objects.
+
 ---
 
 ## Implementation Status
@@ -310,6 +330,8 @@ At browser widths ≤499px (single-view / phone mode), the layout breaks: librar
 - [x] About dialog
 - [x] Dogear bookmark button
 - [x] FileMgr integration for reliable file import
+- [x] iOS Safari file import (viewport-fit fix + overlay cleanup)
+- [x] PWA install support
 
 ### Not Yet Implemented
 - [ ] Location slider navigation

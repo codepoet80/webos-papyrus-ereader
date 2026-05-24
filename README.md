@@ -14,10 +14,19 @@ Papyrus combines the polished Enyo UI of the Kindle Beta app with the pure-JavaS
 - Bookmark pages with the dog-ear button
 - Multi-select file import
 - Touch navigation (tap left/right edges to turn pages)
+- PWA install support (iOS Safari, desktop browsers)
 
 ## Installation
 
-### From Package
+### As a PWA (iOS / Desktop)
+
+1. Open the hosted URL in Safari (iOS) or Chrome/Edge (desktop)
+2. **iOS**: tap the Share button then "Add to Home Screen"
+3. **Desktop**: click the install icon in the address bar
+
+Once installed, the app works fully offline.
+
+### On webOS (HP TouchPad)
 
 1. Download the latest `.ipk` from the releases
 2. Install via webOS Quick Install or `palm-install`:
@@ -79,11 +88,13 @@ pReader's open-source engine made it possible to replace the Kindle app's propri
 - **Framework**: Enyo 1.0 (webOS)
 - **Storage**: WebSQL for book content, localStorage for library metadata and settings
 - **Supported Format**: ePub (DRM-free)
+- **Platforms**: HP TouchPad (webOS), iOS Safari (PWA), modern desktop browsers (PWA)
 
 ## Known Limitations
 
 - DRM-protected ePubs are not supported
 - Some complex ePub layouts may not render perfectly
+- Phone/narrow-browser layout (less than 500px wide) has a known panel-selection issue — the library panel may remain visible instead of the reader panel on first load
 
 ## License
 
