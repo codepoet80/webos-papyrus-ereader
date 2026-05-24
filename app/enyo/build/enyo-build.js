@@ -2696,20 +2696,17 @@ touchmove: function(a) {
 this._send("mousemove", a.changedTouches[0]);
 },
 touchend: function(a) {
+// Stamp the time so duplicate-event filters elsewhere know iphoneGesture
+// just fired.  On Chrome 56+ and iOS Safari 15.4+ the touchstart listener
+// is passive and preventDefault() is ignored, so the browser also fires
+// native (isTrusted) mousedown+click from the same touch.  Consumers can
+// check: b.isTrusted && enyo.iphoneGesture._lastSyntheticTime and skip
+// events that arrive within 500 ms of this stamp.
+this._lastSyntheticTime = Date.now();
 this._send("mouseup", a.changedTouches[0]), this._send("click", a.changedTouches[0]);
 },
 connect: function() {
-// Modern Chrome (56+) and iOS Safari (15.4+) treat document.ontouchstart
-// as a passive listener, so iphoneGesture's preventDefault() call is a
-// no-op.  The browser then fires its own synthetic mousedown+click events
-// in addition to Enyo's, causing popups to close immediately and overlays
-// to flash.  Using addEventListener with {passive:false} opts out of the
-// passive default so preventDefault() suppresses the native events.
-// This code only runs on non-webOS platforms (see outer PalmSystem guard).
-var nonPassive = {passive: false};
-document.addEventListener('touchstart', enyo.dispatch, nonPassive);
-document.addEventListener('touchmove', enyo.dispatch, nonPassive);
-document.addEventListener('touchend', enyo.dispatch, false);
+document.ontouchstart = enyo.dispatch, document.ontouchmove = enyo.dispatch, document.ontouchend = enyo.dispatch;
 }
 }, enyo.iphoneGesture.connect());
 });
@@ -4549,7 +4546,16 @@ var a = this.defaultZ;
 return this._zIndex ? a = this._zIndex : this.hasNode() && (a = Number(enyo.dom.getComputedStyleValue(this.node, "z-index")) || a), this._zIndex = a;
 },
 mousedownHandler: function(a, b) {
-return this.modal && !b.dispatchTarget.isDescendantOf(this) && b.preventDefault(), this._didOpenMousedown = !0, this.fire("onmousedown", b);
+// On Chrome 56+/iOS Safari 15.4+, the browser fires a native (isTrusted)
+// mousedown from the same touch that already opened this popup via Enyo's
+// synthetic click.  Setting _didOpenMousedown on that duplicate would let
+// the subsequent native click immediately close the popup via processClick.
+// Skip only when iphoneGesture was active within the last 500 ms — this
+// never triggers on webOS (iphoneGesture absent) or desktop mouse (no recent
+// touch stamp).
+var isDuplicate = b.isTrusted && enyo.iphoneGesture && enyo.iphoneGesture._lastSyntheticTime && (Date.now() - enyo.iphoneGesture._lastSyntheticTime < 500);
+if (!isDuplicate) this._didOpenMousedown = !0;
+return this.modal && !b.dispatchTarget.isDescendantOf(this) && b.preventDefault(), this.fire("onmousedown", b);
 },
 clickHandler: function(a, b) {
 return this._didOpenMousedown && this.processClick(a, b), this.doClick(b);

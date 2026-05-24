@@ -503,12 +503,17 @@ enyo.kind({
 	},
 
 	handleMouseDown: function(inSender, inEvent) {
-		// Safety-net debounce: the root fix is in iphoneGesture.connect() in
-		// enyo-build.js, which now registers touchstart with {passive:false} so
-		// preventDefault() suppresses the browser's native mouse-event synthesis
-		// on Chrome 56+ and iOS Safari 15.4+.  This guard is kept as a belt-and-
-		// suspenders fallback in case a browser still fires a duplicate mousedown
-		// within the same physical tap (two events from one tap arrive ~1–5ms apart).
+		// On Chrome 56+ and iOS Safari 15.4+ the touchstart listener is passive
+		// so iphoneGesture's preventDefault() is a no-op.  The browser therefore
+		// fires native (isTrusted) mousedown events in addition to Enyo's synthetic
+		// ones, causing this handler to run twice — once to show overlays, once to
+		// immediately hide them.  Primary fix: skip native events that arrive within
+		// 500 ms of iphoneGesture's last touchend synthesis.  Fallback debounce
+		// (300 ms) catches any edge-case duplicates that slip past the isTrusted
+		// check (e.g. desktop browsers that mix touch and mouse).
+		if (inEvent && inEvent.isTrusted && typeof enyo !== 'undefined' && enyo.iphoneGesture && enyo.iphoneGesture._lastSyntheticTime && (Date.now() - enyo.iphoneGesture._lastSyntheticTime < 500)) {
+			return;
+		}
 		var now = Date.now();
 		if (this._lastMouseDownTime !== undefined && (now - this._lastMouseDownTime) < 300) {
 			return;
