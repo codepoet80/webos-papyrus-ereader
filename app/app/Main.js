@@ -1140,7 +1140,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v77)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v78)");
 		this.$.aboutPopup.openAtCenter();
 	},
 

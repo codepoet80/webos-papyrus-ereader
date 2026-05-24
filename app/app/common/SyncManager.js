@@ -183,6 +183,16 @@ var PapyrusSyncManager = {
                         handlePutStatus(retryStatus, true);
                     });
                 }, 3000);
+            } else if (status === 0 && !isRetry) {
+                // Cold TLS handshake or transient CORS preflight failure — retry once after 2s.
+                // pull already does this; push needs it too for never-synced books on first tap.
+                console.log("Sync: push got status 0, retrying in 2s");
+                setTimeout(function() {
+                    self._doPut(settings, fileUrl, payload, function(retryStatus) {
+                        console.log("Sync: push status-0-retry status=" + retryStatus);
+                        handlePutStatus(retryStatus, true);
+                    });
+                }, 2000);
             } else if (status === 0) {
                 console.log("Sync: push failed (network/CORS error)");
                 if (onDone) onDone(false, 0);
