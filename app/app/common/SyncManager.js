@@ -155,7 +155,8 @@ var PapyrusSyncManager = {
 
         console.log("Sync: push starting for key=" + syncKey + " position=" + position);
 
-        this._doPut(settings, fileUrl, payload, function(status) {
+        // Inner handler so the 423-retry path can recurse exactly once.
+        var handlePutStatus = function(status, isRetry) {
             if (status === 409) {
                 // Parent collection doesn't exist yet — create it and retry once
                 console.log("Sync: directory missing, attempting MKCOL");
@@ -171,6 +172,17 @@ var PapyrusSyncManager = {
                         if (onDone) onDone(ok2, retryStatus);
                     });
                 });
+            } else if (status === 423 && !isRetry) {
+                // WebDAV 423 Locked — ownCloud desktop client may hold a stale lock.
+                // Wait 3 s and retry once; a transient lock should clear in that window.
+                // If the lock persists the caller receives (false, 423) and can advise the user.
+                console.log("Sync: push got 423 Locked, retrying in 3s");
+                setTimeout(function() {
+                    self._doPut(settings, fileUrl, payload, function(retryStatus) {
+                        console.log("Sync: push 423-retry status=" + retryStatus);
+                        handlePutStatus(retryStatus, true);
+                    });
+                }, 3000);
             } else if (status === 0) {
                 console.log("Sync: push failed (network/CORS error)");
                 if (onDone) onDone(false, 0);
@@ -181,6 +193,10 @@ var PapyrusSyncManager = {
                 console.log("Sync: push succeeded status=" + status);
                 if (onDone) onDone(true, status);
             }
+        };
+
+        this._doPut(settings, fileUrl, payload, function(status) {
+            handlePutStatus(status, false);
         });
     },
 

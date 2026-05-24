@@ -1081,7 +1081,9 @@ enyo.kind({
 			// Step 2: always push (creates file on first sync, updates on subsequent)
 			PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, positionToSave, [], function(ok, pushStatus) {
 				if (!ok) {
-					var errMsg = pushStatus === 0 ? "Could not reach sync server." : "Sync error (HTTP " + pushStatus + ").";
+					var errMsg = pushStatus === 0   ? "Could not reach sync server." :
+					             pushStatus === 423 ? "Sync file is locked by another app.\nWait a moment and try again." :
+					                                 "Sync error (HTTP " + pushStatus + ").";
 					self.log("Sync: push failed — " + errMsg);
 					self.showSyncStatus(errMsg);
 					return;
@@ -1138,7 +1140,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v73)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v77)");
 		this.$.aboutPopup.openAtCenter();
 	},
 
