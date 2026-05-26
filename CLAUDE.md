@@ -436,6 +436,22 @@ var errMsg = pushStatus === 0   ? "Could not reach sync server." :
                                   "Sync error (HTTP " + pushStatus + ").";
 ```
 
+### 19. Import Pipeline — Performance Sensitivity and Protected Invariants
+
+**Do not change `EpubReader.js` or `HTMLBook.js` without a before/after import timing test on a real webOS TouchPad.**
+
+The import pipeline is fragile in ways that are not obvious from static code analysis:
+
+**EpubReader.js affects both display AND import.** Any change to how EpubReader loads or processes images will affect the import path, not just the book-open path. A change made to improve cover image display silently made Cognition in the Wild (40+ images, 83 text chunks) balloon from 3 minutes to 10+ minutes on device. The root cause was never fully isolated before the change was reverted.
+
+**HTMLBook.js `tagWorker` defer() calls are expensive on old WebKit.** Each `Function.prototype.defer()` call on webOS TouchPad JavaScriptCore (~1GHz ARM) costs ~35ms of real time. The tagWorker already yields once per img tag — that is intentional and sufficient. Do NOT add additional defer() calls inside the img processing path for normal-sized images.
+
+**Synchronous `btoa()` is fast for small images.** On old WebKit, `btoa()` is O(n²) on very large strings (hundreds of KB to MB), but for images under ~100KB it completes in milliseconds. Replacing synchronous btoa with async chunked encoding (one defer per 3KB chunk) makes small image encoding 5–10× slower because the per-defer overhead exceeds the btoa time. Only use async chunked encoding for images above a size threshold (e.g. 200KB+).
+
+**Canary test for import performance:** Import "Cognition in the Wild" (a heavily illustrated cognitive science textbook, ~83 text chunks, 40+ GIF images). On a webOS TouchPad at commit `656db0e`, this completes in approximately 3 minutes. Any regression beyond 5 minutes indicates a problem in the import pipeline.
+
+**The `asyncHandled` pattern was tried and reverted.** A session attempted to fix a btoa hang on a large cover image (Star Trek Picard, 1.44MB decompressed) by making all image encoding async-chunked. This was reverted because it made typical imports 3× slower. If the large-image btoa hang is revisited, the fix must be gated by image size — not applied universally.
+
 ---
 
 ## Implementation Status
