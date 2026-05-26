@@ -855,9 +855,8 @@ EpubReader.prototype.getCoverImage = function() {
 		return null;
 	}
 
-	// Guard against very large cover images — btoa() on old WebKit is O(n²) and
-	// a 1MB+ image can hang the import for minutes. Skip and show no cover instead.
-	var MAX_COVER_BYTES = 200 * 1024; // 200KB
+	// Guard against truly pathological cover images — skip rather than hang.
+	var MAX_COVER_BYTES = 3 * 1024 * 1024; // 3MB
 	if (coverImage.data.length > MAX_COVER_BYTES) {
 		enyo.warn("EpubReader: cover image too large (" + Math.round(coverImage.data.length/1024) + "kb), skipping thumbnail");
 		return null;
