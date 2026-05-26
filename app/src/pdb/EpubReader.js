@@ -265,6 +265,7 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 		creator: null,
 		language: null,
 		identifier: null,
+		coverId: null,      // id of the cover image item (<meta name="cover"> or properties="cover-image")
 		chapters: new Array(),
 		images: new Array()
 	}
@@ -339,6 +340,15 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 		}
 	}
 
+	// ePub2 cover: <meta name="cover" content="manifest-item-id"/>
+	var allMetas = xmlDoc.getElementsByTagName("meta");
+	for (var mi = 0; mi < allMetas.length; mi++) {
+		if (allMetas[mi].getAttribute("name") === "cover") {
+			data.coverId = allMetas[mi].getAttribute("content");
+			break;
+		}
+	}
+
 	//Now, we check if there's a spine TOC that rearranges the chapters
 	var spine = xmlDoc.getElementsByTagName("spine");
 	var spineOrder = new Array();
@@ -373,6 +383,10 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 		}
 		//We check the type
 		if (entry.type.startsWith("image/")) {
+			// ePub3 cover: <item properties="cover-image" .../>
+			if (!data.coverId && item.getAttribute("properties") === "cover-image") {
+				data.coverId = entry.id;
+			}
 			data.images.push(entry);
 		} else if (entry.type == "application/xhtml+xml") {
 			//We check if there's a fixed position from the spine
@@ -808,22 +822,44 @@ EpubReader.prototype.getCoverImage = function() {
 
 	var coverImage = null;
 
-	// Look for an image with id containing "cover"
-	for (var i = 0; i < rf.images.length; i++) {
-		var img = rf.images[i];
-		if (img.id && img.id.toLowerCase().indexOf("cover") !== -1) {
-			coverImage = img;
-			break;
+	// 1. Explicit cover id from <meta name="cover"> or properties="cover-image"
+	if (rf.coverId) {
+		for (var i = 0; i < rf.images.length; i++) {
+			if (rf.images[i].id === rf.coverId) {
+				coverImage = rf.images[i];
+				break;
+			}
 		}
 	}
 
-	// Fall back to first image
+	// 2. Image whose id or href contains "cover"
+	if (!coverImage) {
+		for (var i = 0; i < rf.images.length; i++) {
+			var img = rf.images[i];
+			var idMatch   = img.id   && img.id.toLowerCase().indexOf("cover")   !== -1;
+			var hrefMatch = img.href && img.href.toLowerCase().indexOf("cover") !== -1;
+			if (idMatch || hrefMatch) {
+				coverImage = img;
+				break;
+			}
+		}
+	}
+
+	// 3. Fall back to first image
 	if (!coverImage) {
 		coverImage = rf.images[0];
 	}
 
 	// Check if we have data
 	if (!coverImage || !coverImage.data || coverImage.data.length === 0) {
+		return null;
+	}
+
+	// Guard against very large cover images — btoa() on old WebKit is O(n²) and
+	// a 1MB+ image can hang the import for minutes. Skip and show no cover instead.
+	var MAX_COVER_BYTES = 200 * 1024; // 200KB
+	if (coverImage.data.length > MAX_COVER_BYTES) {
+		enyo.warn("EpubReader: cover image too large (" + Math.round(coverImage.data.length/1024) + "kb), skipping thumbnail");
 		return null;
 	}
 
