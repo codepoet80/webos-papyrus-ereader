@@ -107,6 +107,7 @@ var PapyrusSyncManager = {
         var xhr = new XMLHttpRequest();
         xhr.open('MKCOL', url, true);
         xhr.setRequestHeader('Authorization', this._basicAuth(settings.syncUser, settings.syncPass));
+        try { xhr.setRequestHeader('Origin', 'null'); } catch(e) {}
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== 4) return;
             var ok = xhr.status === 201 || xhr.status === 405 || xhr.status === 200;
@@ -122,6 +123,15 @@ var PapyrusSyncManager = {
         xhr.open('PUT', fileUrl, true);
         xhr.setRequestHeader('Authorization', this._basicAuth(settings.syncUser, settings.syncPass));
         xhr.setRequestHeader('Content-Type', 'application/json');
+        // webOS native apps run from file://, so the browser sends Origin: file:// on
+        // non-simple cross-origin requests (PUT, DELETE). Some WebDAV servers (including
+        // ownCloud) crash with 500 trying to parse file:// as an HTTP origin.
+        // "null" is the CORS opaque-origin sentinel — valid per spec, and servers that
+        // don't explicitly allow it simply ignore the header rather than crashing.
+        // In old WebKit (webOS 534) Origin is not yet a forbidden header, so this
+        // setRequestHeader call overrides what the browser would send. In modern browsers
+        // it is a forbidden header and this call is silently ignored — harmless.
+        try { xhr.setRequestHeader('Origin', 'null'); } catch(e) {}
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== 4) return;
             console.log("Sync: PUT status=" + xhr.status);
