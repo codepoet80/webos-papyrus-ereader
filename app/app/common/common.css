@@ -34,6 +34,57 @@
 	opacity: 0;
 }
 
+/*
+ * Override <font> presentational attributes so the reader's font controls work.
+ *
+ * Old ePubs (produced by Sigil, early calibre, etc.) use deprecated <font> tags:
+ *   <font face="Times New Roman, Serif" size="3">...</font>
+ * The HTML face/size attributes act as element-level style declarations and
+ * override CSS inheritance from the container, so the user's chosen font/size
+ * settings have no effect.
+ *
+ * Solution:
+ *   - font-family: inherit !important → inherits from the container's inline style
+ *     (set by EpubRenderer.applyFont()), honouring the user's typeface choice.
+ *   - Per-size em rules → preserve the book's relative size hierarchy (headings
+ *     larger than body, captions smaller) while making everything scale with the
+ *     user's chosen base size.  Mirrors the classic HTML size-to-pt mapping:
+ *     size 1=x-small, 2=small, 3=medium (base), 4=large, 5=x-large, 6=xx-large, 7=xxx-large.
+ *
+ * These rules are scoped to the epub containers so nothing else in the app is affected.
+ */
+.epub-page-container font,
+.epub-offscreen font {
+	font-family: inherit !important;
+}
+
+.epub-page-container font[size="1"], .epub-offscreen font[size="1"] { font-size: 0.67em !important; }
+.epub-page-container font[size="2"], .epub-offscreen font[size="2"] { font-size: 0.83em !important; }
+.epub-page-container font[size="3"], .epub-offscreen font[size="3"] { font-size: 1em   !important; }
+.epub-page-container font[size="4"], .epub-offscreen font[size="4"] { font-size: 1.17em !important; }
+.epub-page-container font[size="5"], .epub-offscreen font[size="5"] { font-size: 1.5em  !important; }
+.epub-page-container font[size="6"], .epub-offscreen font[size="6"] { font-size: 2em    !important; }
+.epub-page-container font[size="7"], .epub-offscreen font[size="7"] { font-size: 3em    !important; }
+
+/*
+ * Collapse excessive consecutive <br/> runs caused by table-to-br conversion.
+ *
+ * EpubReader converts HTML tables (used for layout in old ePubs) into <br/> tags:
+ * each <table> and <tr> becomes a <br/>, so a 5-row paragraph wrapper produces
+ * 6 consecutive <br/> tags and the gap between two paragraphs becomes 12.
+ *
+ * The CSS adjacent-sibling selector hides the 3rd <br/> onward in any run,
+ * leaving at most 2 visible — a normal paragraph gap.  Single and double <br/>
+ * tags used intentionally (line breaks, stanza gaps in poetry) are unaffected.
+ *
+ * Applied to both the display container and the offscreen PageFitter element so
+ * pagination measurements stay consistent with what is displayed.
+ */
+.epub-page-container br + br + br,
+.epub-offscreen br + br + br {
+	display: none;
+}
+
 .epub-offscreen {
 	position: absolute;
 	top: -9999px;

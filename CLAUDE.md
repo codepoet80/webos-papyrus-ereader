@@ -452,6 +452,38 @@ The import pipeline is fragile in ways that are not obvious from static code ana
 
 **The `asyncHandled` pattern was tried and reverted.** A session attempted to fix a btoa hang on a large cover image (Star Trek Picard, 1.44MB decompressed) by making all image encoding async-chunked. This was reverted because it made typical imports 3× slower. If the large-image btoa hang is revisited, the fix must be gated by image size — not applied universally.
 
+### 20. `<font>` Tag Override — Font Controls Ignored by Old ePubs (`common.css`)
+
+**Problem:** ePubs produced by early Sigil, calibre, and PDF-to-ePub converters use deprecated HTML `<font face="..." size="...">` tags for all text. The `face` and `size` attributes act as element-level style declarations and override CSS inheritance from the container. `EpubRenderer.applyFont()` sets `font-family` and `font-size` as inline styles on `.epub-page-container`, but `<font>` elements inside the container ignore those inherited values entirely. Result: the user's font face and font size controls have no visible effect on the text. As a secondary symptom, `<br/>` tags (which use the *container's* line-height) did respond to font size changes, so increasing size only made paragraph spacing larger without making text bigger.
+
+**Fix (`common.css`):** CSS rules scoped to `.epub-page-container` and `.epub-offscreen` force `<font>` elements to inherit font-family with `!important`. The seven HTML `size` attribute values (1–7) are mapped to proportional `em` units so the book's relative size hierarchy (headings vs. body vs. captions) is preserved while everything scales with the user's chosen base size:
+
+```css
+.epub-page-container font,
+.epub-offscreen font { font-family: inherit !important; }
+
+.epub-page-container font[size="1"], .epub-offscreen font[size="1"] { font-size: 0.67em !important; }
+.epub-page-container font[size="2"], .epub-offscreen font[size="2"] { font-size: 0.83em !important; }
+.epub-page-container font[size="3"], .epub-offscreen font[size="3"] { font-size: 1em   !important; }
+.epub-page-container font[size="4"], .epub-offscreen font[size="4"] { font-size: 1.17em !important; }
+/* ... 5/6/7 similarly ... */
+```
+
+Rules are applied to **both** `.epub-page-container` and `.epub-offscreen` so the PageFitter binary search measures content at the same size that is displayed — keeping pagination consistent. No re-import required; this is a render-time CSS change. Modern ePubs that use proper CSS (not `<font>` tags) are completely unaffected.
+
+### 21. Excessive `<br/>` Spacing from Table-Based Old ePub Layout (`common.css`)
+
+**Problem:** ePubs converted from PDFs or HTML using table-based layout (common 2007–2012 era, e.g. "Cognition in the Wild") wrap each paragraph in a 5-row `<table>`. `EpubReader` converts `<table>` and each `<tr>` opening to `<br/>`, so a single paragraph structure produces 6 consecutive `<br/>` tags, and the gap between two adjacent paragraphs becomes 12. At 18px text with 1.6 line-height (~29px/break), 12 breaks consume ~350px — easily a third of a page — purely as whitespace.
+
+**Fix (`common.css`):** CSS adjacent-sibling selector hides the 3rd `<br/>` onward in any consecutive run, leaving at most 2 visible (a normal paragraph gap). Single and double `<br/>` tags used intentionally for line breaks or stanza spacing in other books are unaffected.
+
+```css
+.epub-page-container br + br + br,
+.epub-offscreen br + br + br { display: none; }
+```
+
+Applied to `.epub-offscreen` as well so PageFitter measures the collapsed layout, keeping page fills accurate. No re-import required.
+
 ---
 
 ## Implementation Status
@@ -480,6 +512,8 @@ The import pipeline is fragile in ways that are not obvious from static code ana
 - [x] Service worker self-caching fix (iOS) + HTTP cache fix (all browsers)
 - [x] Popup menus stay open on Chrome / iOS Safari (isTrusted duplicate-event filter)
 - [x] WebDAV sync reliability: 423-locked retry + status-0 retry for push
+- [x] `<font>` tag override: font face/size controls now work on old table-layout ePubs
+- [x] Excessive `<br/>` spacing collapsed: old PDF-converted ePubs no longer waste a third of each page on whitespace
 
 ### Not Yet Implemented
 - [ ] Location slider navigation
