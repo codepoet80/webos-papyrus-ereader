@@ -3729,6 +3729,13 @@ flickHandler: function(a, b) {
 !this.disabled && this.down && this.setDown(!1);
 },
 clickHandler: function(a, b) {
+// iOS Safari / Chrome fire a native (isTrusted) click after iphoneGesture's
+// synthetic one.  For toggling buttons that would flip depressed on then off.
+// Drop the native duplicate within the 500ms window.
+var isDuplicate = b && b.isTrusted && enyo.iphoneGesture &&
+    enyo.iphoneGesture._lastSyntheticTime &&
+    (Date.now() - enyo.iphoneGesture._lastSyntheticTime < 500);
+if (isDuplicate) return;
 if (!this.disabled) return this.toggling && this.setDepressed(!this.depressed), this.doClick(b);
 },
 dragstartHandler: function() {
