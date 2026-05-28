@@ -1214,6 +1214,8 @@ enyo.kind({
 			} catch (e) {
 				this.log("Error disabling dim: " + e);
 			}
+		} else {
+			enyo.windows.setWindowProperties(window, {blockScreenTimeout: true});
 		}
 	},
 
@@ -1224,6 +1226,8 @@ enyo.kind({
 			} catch (e) {
 				this.log("Error enabling dim: " + e);
 			}
+		} else {
+			enyo.windows.setWindowProperties(window, {blockScreenTimeout: false});
 		}
 	},
 
