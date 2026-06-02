@@ -441,6 +441,10 @@ enyo.kind({
 				this.currentBook.lastAccessed = Date.now();
 				// Save to localStorage
 				this.updateBookInLibrary(this.currentBook);
+				// Push to sync server so backgrounding/killing the PWA doesn't leave
+				// the server behind the local position (fire-and-forget).
+				var book = this.currentBook;
+				PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, position, []);
 			}
 		}
 	},
