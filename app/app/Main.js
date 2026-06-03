@@ -1143,7 +1143,7 @@ enyo.kind({
 	},
 
 	showAbout: function() {
-		var version = "1.3.2";
+		var version = "1.3.3";
 		try {
 			var appInfo = enyo.fetchAppInfo();
 			if (appInfo && appInfo.version) {
