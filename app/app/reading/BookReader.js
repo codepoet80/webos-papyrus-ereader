@@ -525,6 +525,13 @@ enyo.kind({
 		var x = inEvent.pageX || inEvent.clientX;
 		var width = window.innerWidth;
 
+		// On PWA/browser (not webOS), leave a 20 px dead zone at each physical edge
+		// so OS swipe-from-edge gestures (iOS back swipe, Android edge navigation)
+		// are not accidentally interpreted as page turns.
+		if (!window.PalmSystem && (x < 20 || x > width - 20)) {
+			return;
+		}
+
 		if (x < width * 0.30) {
 			// Left 30% - previous page
 			if (!this.overlaysShowing) {
