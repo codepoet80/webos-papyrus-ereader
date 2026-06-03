@@ -646,12 +646,17 @@ EpubReader.prototype.filterChapter = function(chapter, callback, state) {
 				noStreamTag = true;
 				break;
 				
-			//~~~ <p> tags are ugly and replaced with one <br/>; if opening, we add a tab
+			//~~~ <p> opening → <br/>\t; closing → <span class="pb"></span><br/>
+			// The span breaks CSS br+br+br sibling chains at paragraph boundaries (CSS ignores
+			// text nodes for adjacency) so the br+br+br rule only fires on table/tr <br/> runs.
 			case "p":
 				if (noStreamTag) { break; }
-				concatArray(state.filterData, [ 0x3C, 0x62, 0x72, 0x2F, 0x3E ]);
 				if (!tag.closing) {
+					concatArray(state.filterData, [ 0x3C, 0x62, 0x72, 0x2F, 0x3E ]);
 					state.filterData.push(0x09);
+				} else {
+					concatArray(state.filterData, stringToBytes('<span class="pb"></span>'));
+					concatArray(state.filterData, [ 0x3C, 0x62, 0x72, 0x2F, 0x3E ]);
 				}
 				noStreamTag = true;
 				break;

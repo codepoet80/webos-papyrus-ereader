@@ -471,18 +471,24 @@ The import pipeline is fragile in ways that are not obvious from static code ana
 
 Rules are applied to **both** `.epub-page-container` and `.epub-offscreen` so the PageFitter binary search measures content at the same size that is displayed — keeping pagination consistent. No re-import required; this is a render-time CSS change. Modern ePubs that use proper CSS (not `<font>` tags) are completely unaffected.
 
-### 21. Excessive `<br/>` Spacing from Table-Based Old ePub Layout (`common.css`)
+### 21. Excessive `<br/>` Spacing from Table-Based Old ePub Layout (`common.css`, `EpubReader.js`)
 
 **Problem:** ePubs converted from PDFs or HTML using table-based layout (common 2007–2012 era, e.g. "Cognition in the Wild") wrap each paragraph in a 5-row `<table>`. `EpubReader` converts `<table>` and each `<tr>` opening to `<br/>`, so a single paragraph structure produces 6 consecutive `<br/>` tags, and the gap between two adjacent paragraphs becomes 12. At 18px text with 1.6 line-height (~29px/break), 12 breaks consume ~350px — easily a third of a page — purely as whitespace.
 
-**Fix (`common.css`):** CSS adjacent-sibling selector hides the 3rd `<br/>` onward in any consecutive run, leaving at most 2 visible (a normal paragraph gap). Single and double `<br/>` tags used intentionally for line breaks or stanza spacing in other books are unaffected.
+**Fix (`common.css`):** CSS adjacent-sibling selector hides the 3rd `<br/>` onward in any consecutive run:
 
 ```css
 .epub-page-container br + br + br,
 .epub-offscreen br + br + br { display: none; }
 ```
 
-Applied to `.epub-offscreen` as well so PageFitter measures the collapsed layout, keeping page fills accurate. No re-import required.
+**Critical constraint — why `</p>` must emit a chain-breaker span (`EpubReader.js`):**
+
+CSS `br + br + br` counts adjacent sibling **elements**, ignoring text nodes. Without a chain-breaker, every `<br/>` in a chapter (across all paragraphs) forms one continuous sibling chain. For a modern ePub that uses only `<p>` tags (each converted to `<br/>\t` open + `<br/>` close), a chapter of n paragraphs produces 2n consecutive `<br/>` siblings. The 3rd `<br/>` (the opening of the 2nd paragraph) gets hidden — collapsing all paragraphs past the first onto one line.
+
+**Fix:** `EpubReader.js` emits `<span class="pb"></span><br/>` for `</p>` instead of just `<br/>`. The empty span is an element sibling that resets the CSS chain at every paragraph boundary. For normal books, runs never reach 3 consecutive `<br/>`; for old table-layout books, the table/tr-generated `<br/>` still form 3+ runs between paragraphs and get correctly suppressed.
+
+**Re-import required:** Books already imported before this fix have the old HTML structure (no span chain-breakers). For already-imported modern ePubs where bold/italic/line-breaks appear broken, delete and re-import the book. Old table-layout books already in the library continue to work with the CSS rule alone.
 
 ---
 
