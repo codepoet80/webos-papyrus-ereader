@@ -31,7 +31,7 @@ Once installed, the app works fully offline.
 
 ### On webOS (HP TouchPad)
 
-1. Download the latest `.ipk` from the releases
+1. Download the latest `.ipk` from the App Museum: https://appcatalog.webosarchive.org/app/PapyruseReader
 2. Install via webOS Quick Install or `palm-install`:
    ```bash
    palm-install com.palm.codepoet.papyrus_*.ipk
