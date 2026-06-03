@@ -568,6 +568,8 @@ White
 .pop-balloon.enyo-popup {
 	border-width: 9px;
 	border-image: none;
+	-webkit-background-clip: padding-box;
+	background-clip: padding-box;
 }
 
 .white.pop-balloon {
