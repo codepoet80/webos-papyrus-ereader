@@ -19,7 +19,7 @@ enyo.kind({
 		// Toaster for slideout panels (TOC, search, markups)
 		{kind: "Toaster", name: "toaster", scrim: true, flyInFrom: "right", style: "top:0px; bottom:0px; z-index:500;", lazy: false, onClose: "closeToaster", components: [
 			{className: "enyo-sliding-view-shadow"},
-			{kind: "VFlexBox", width: "600px", flex: 1, height: "100%", components: [
+			{kind: "VFlexBox", style: "width: 600px; max-width: 100vw;", flex: 1, height: "100%", components: [
 				{kind: "ereader.panels.SlideoutPanel", flex: 1, name: "slideoutContents", onSlidingDragBtnClicked: "handleSlideoutDismissal", onSearchResultSelected: "handleSearchResultSelected", onSearchQueried: "handleSearchQueried", onMarkupsResultSelected: "handleMarkupsResultSelected"},
 				{kind: "Toolbar", components: [
 					{kind: "GrabButton", onclick: "closeToaster"},
@@ -1166,7 +1166,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v90)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v91)");
 		this.$.aboutPopup.openAtCenter();
 	},
 
