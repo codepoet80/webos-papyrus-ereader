@@ -79,19 +79,21 @@ The app is fully functional and ready for community testing.
 ## Quick Start Commands
 
 ```bash
-# Build and deploy
-cd /Users/jonwise/Projects/webos-ereader
-palm-package com.palm.codepoet.papyrus && palm-install com.palm.codepoet.papyrus_*.ipk
+# Bump build number + package webOS .ipk (preferred)
+cd /Users/jonwise/Projects/webos-papyrus-ereader
+./build.sh
 
-# Launch app
-palm-launch com.palm.codepoet.papyrus
+# Install and launch after packaging
+palm-install com.palm.codepoet.papyrus_*.ipk && palm-launch com.palm.codepoet.papyrus
 
 # View device logs (for debugging)
 palm-log -f com.palm.codepoet.papyrus
 
-# Full build-install-launch cycle
-palm-package com.palm.codepoet.papyrus && palm-install com.palm.codepoet.papyrus_*.ipk && palm-launch com.palm.codepoet.papyrus
+# Manual package (skips build number bump)
+palm-package app
 ```
+
+`build.sh` increments the build number in `app/serviceworker.js` (CACHE_NAME) and `app/app/Main.js` (About dialog string) in lockstep, then runs `palm-package app`.
 
 ---
 
@@ -192,6 +194,30 @@ palm://com.palm.db/find {query: {from: "com.palm.media.types:1"}}
 ```
 
 Import supports multi-select - users can choose multiple ePubs and import them all at once with progress tracking.
+
+### Share Page
+
+"Share Page" appears in the Book menu (bottom toolbar, book-info popup). It sends the plain text of the current page as an email.
+
+Platform dispatch in `BookReader.handleSharePage()`:
+1. **webOS** (`window.PalmSystem`): launches `com.palm.app.email` via `palm://com.palm.applicationManager/launch` with `{summary, text}`
+2. **PWA on iOS/Android** (`navigator.share`): invokes the native share sheet
+3. **PWA on desktop / older browsers**: falls back to a `mailto:` URL (body truncated to 1800 chars)
+
+Page text is extracted via `EpubRenderer.getPageText()` → `body.getPageText()` → `BookReader.handleSharePage()`.
+
+### Furthest Read Position
+
+`locationsCompleted` (stored in `localStorage` under `ereader_library`) is a **high-water mark** — it only ever advances forward. Jumping to a search result, TOC entry, or any other backward navigation does NOT update it.
+
+**All three write sites are guarded:**
+- `BookReader.saveReadingPosition()` — called when leaving the reader
+- `Main.handleLocalPositionUpdated()` — fires on every page turn
+- `Main.saveReadingPosition()` — called on app backgrounding
+
+Guard pattern in each: `if (position > (current || 0)) { update }`.
+
+The Bookmarks panel shows this value as "Furthest read position". It is also the position the book resumes from when reopened and the value synced to WebDAV.
 
 ---
 
@@ -490,6 +516,35 @@ CSS `br + br + br` counts adjacent sibling **elements**, ignoring text nodes. Wi
 
 **Re-import required:** Books already imported before this fix have the old HTML structure (no span chain-breakers). For already-imported modern ePubs where bold/italic/line-breaks appear broken, delete and re-import the book. Old table-layout books already in the library continue to work with the CSS rule alone.
 
+### 22. Pop-Balloon Popup White Rectangle on webOS (`BookReader.css`, `BookReader.js`)
+
+**Problem:** On webOS, all popup menus (Book menu, Font, Brightness) showed a white rectangle behind their rounded balloon borders when the reader was in sepia or black theme.
+
+**Two root causes:**
+
+1. `.pop-balloon.enyo-popup` had `border-image: none` to suppress the Enyo Onyx popup background, but webOS old WebKit only understands `-webkit-border-image`. The Onyx `popup.png` (white/grey rounded rectangle) was still rendering behind the balloon image. **Fix:** added `-webkit-border-image: none` to `.pop-balloon.enyo-popup`.
+
+2. `BookReader.updateThemeClass()` called `this.$.body.changeCSSClassesTo()` but never `this.$.bottom_row.changeCSSClassesTo()` or `this.$.top_row.changeCSSClassesTo()`. The Book menu, font, and brightness popups kept their initial `white` class permanently regardless of theme. **Fix:** both calls added to `updateThemeClass`.
+
+### 23. Search Feature — Event Re-entrancy (`Main.js`)
+
+**Problem:** Tapping the magnifying glass, typing, and pressing Enter did nothing. The search query event from the toolbar reached `top_row` (logged) but produced no visible result.
+
+**Root cause:** `Main.handleSearchQueried` called `sv.doSearch()`, which internally fires `onSearchQueried` back up through `SlideoutPanel` → `Main.handleSearchQueried` → `sv.doSearch()` → infinite synchronous recursion. webOS JavaScriptCore stack-overflowed before any DOM update was flushed, so the panel never opened.
+
+**Fix:** `_searchInProgress` flag (wrapped in try/finally) in `Main.handleSearchQueried` detects the re-entrant call from `SearchView.doSearch()` and returns immediately, breaking the cycle. The underlying `SearchView.doSearch()` then completes normally and calls `EpubRenderer.searchBook()`.
+
+### 24. Furthest Read Position — High-Water Mark (`BookReader.js`, `Main.js`)
+
+**Problem:** Jumping to a search result (or any backward navigation) updated `locationsCompleted` to the earlier position, overwriting the user's actual reading progress. The Bookmarks panel showed the search result location as "Last read position".
+
+**Fix:** All three write sites for `locationsCompleted` now guard with `if (newPos > prev) { update }`:
+- `BookReader.saveReadingPosition()`
+- `Main.handleLocalPositionUpdated()` — fires on every page turn; this was the live write path
+- `Main.saveReadingPosition()` — called on app backgrounding
+
+Label in the Bookmarks panel updated from "Last read position" to "Furthest read position".
+
 ---
 
 ## Implementation Status
@@ -520,6 +575,10 @@ CSS `br + br + br` counts adjacent sibling **elements**, ignoring text nodes. Wi
 - [x] WebDAV sync reliability: 423-locked retry + status-0 retry for push
 - [x] `<font>` tag override: font face/size controls now work on old table-layout ePubs
 - [x] Excessive `<br/>` spacing collapsed: old PDF-converted ePubs no longer waste a third of each page on whitespace
+- [x] Share Page from Book menu (webOS email / Web Share API / mailto fallback)
+- [x] Pop-balloon popup white rectangle fixed on webOS (theme class propagation + `-webkit-border-image: none`)
+- [x] Search within book wired end-to-end (toolbar → panel → EpubRenderer, re-entrancy guard)
+- [x] Furthest read position bookmark (high-water mark, never moves backward)
 
 ### Not Yet Implemented
 - [ ] Location slider navigation
