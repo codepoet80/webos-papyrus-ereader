@@ -564,9 +564,12 @@
 White
 -----------------*/
 
-/* pop-balloon popups use 9px balloon images, not the 24px enyo-popup default */
+/* pop-balloon popups use 9px balloon images, not the 24px enyo-popup default.
+   Both prefixed and unprefixed border-image must be cleared so the Onyx
+   popup.png (white rectangle) does not render behind the balloon on webOS. */
 .pop-balloon.enyo-popup {
 	border-width: 9px;
+	-webkit-border-image: none;
 	border-image: none;
 	-webkit-background-clip: padding-box;
 	background-clip: padding-box;

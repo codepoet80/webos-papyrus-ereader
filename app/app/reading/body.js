@@ -617,6 +617,10 @@ enyo.kind({
 		this.$.epubRenderer.historyBack();
 	},
 
+	getPageText: function() {
+		return this.$.epubRenderer.getPageText();
+	},
+
 	goToTableOfContents: function() {
 		this.$.epubRenderer.gotoTableOfContents();
 	},

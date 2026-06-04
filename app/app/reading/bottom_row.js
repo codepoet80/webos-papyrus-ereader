@@ -13,7 +13,8 @@ enyo.kind({
 		onLocationSelected: "",
 		onSlideOutSelected: "",
 		onTOCSelected: "",
-		onPreviousLocationSelected: ""
+		onPreviousLocationSelected: "",
+		onSharePage: ""
 	},
 	components: [
 		{nodeTag: "hr", className:"hr-bottom"},
@@ -79,6 +80,9 @@ enyo.kind({
 				break;
 			case "markup":
 				this.doSlideOutSelected("markups");
+				break;
+			case "share":
+				this.doSharePage();
 				break;
 			default:
 				break;

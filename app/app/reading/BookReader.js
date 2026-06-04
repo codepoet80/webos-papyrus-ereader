@@ -20,10 +20,12 @@ enyo.kind({
 		 service: "palm://com.palm.keys/audio/", method: "status",
 		 subscribe: true, onSuccess: "handleVolumeKey", onFailure: "handleVolumeKeyError"},
 
+		{name: "emailService", kind: "PalmService", service: "palm://com.palm.applicationManager/", method: "launch"},
+
 		{name: "top_row", kind: "ereader.top_row", className: "top-row-controls", onPageManipulation: "doPageManipulation", onLibrarySelected: "handleLibrarySelected", onSearchQueried: "handleSearchQueried", onBrightnessChanged: "handleBrightnessChanged", showing: false, onTypeSelection: "handleTypeSelection", onFontSizeChanged: "handleFontSizeChanged", onReaderThemeChanged: "handleReaderThemeChanged", onclick: "setHideOnceOne", onSearchBoxCollapsed: "setHideOnceTwo"},
 		{kind: "ereader.reading.DogEarButton", name: "readerDogear", onclick: "handleDogear", className: "reader-dogear", showing: false},
 		{name: "body", kind: "ereader.body", onmousedown: "handleMouseDown", style: "position: absolute; top: 0px; left: 0px; z-index: 50; width: 100%; height: 100%;", onTocAvailableChanged: "handleTocAvailableChanged", onPluginReady: "handlePluginReady", onBookmarkUpdated: "updateBookmarks", onLocationChanged: "handleLocationChanged", onShowOverlays: "showOverlays", onPluginStarted: "handlePluginStarted", onNotesShowingChanged: "handleNoteShowingChanged", onEndOfBook: "handleEndOfBook"},
-		{name: "bottom_row", kind: "ereader.bottom_row", className: "bottom-row-controls", onSlideOutSelected: "handleSlideOutSelected", onclick: "setHideOnceOne", showing: false, onLocationSelected: "handleLocationSelected", onTOCSelected: "handleTOCSelected", onPreviousLocationSelected: "handlePrevLocSelected"},
+		{name: "bottom_row", kind: "ereader.bottom_row", className: "bottom-row-controls", onSlideOutSelected: "handleSlideOutSelected", onclick: "setHideOnceOne", showing: false, onLocationSelected: "handleLocationSelected", onTOCSelected: "handleTOCSelected", onPreviousLocationSelected: "handlePrevLocSelected", onSharePage: "handleSharePage"},
 		{name: "dimCover", className: "dimCover", onclick: "handleDismissSlideout", showing: false},
 		{name: "loadingPopup", kind: "Popup", className: "spinner-popup", lazy: false, scrim: true, modal: true, components: [
 			{kind: "VFlexBox", align: "center", components: [
@@ -465,6 +467,8 @@ enyo.kind({
 
 		this.addClass(themeClass);
 		this.$.body.changeCSSClassesTo(themeClass);
+		this.$.bottom_row.changeCSSClassesTo(themeClass);
+		this.$.top_row.changeCSSClassesTo(themeClass);
 	},
 
 	handleBrightnessChanged: function(inSender, brightness) {
@@ -481,25 +485,28 @@ enyo.kind({
 	},
 
 	saveReadingPosition: function() {
-		if (this.bookData && this.currentLocStart !== undefined) {
-			this.bookData.locationsCompleted = this.currentLocStart;
-			// Save to library
-			try {
-				var libraryJson = localStorage.getItem("ereader_library");
-				var library = libraryJson ? JSON.parse(libraryJson) : [];
-				for (var i = 0; i < library.length; i++) {
-					if (library[i].asin === this.bookData.asin) {
-						library[i].locationsCompleted = this.currentLocStart;
-						library[i].lastAccessed = Date.now();
-						break;
-					}
-				}
-				localStorage.setItem("ereader_library", JSON.stringify(library));
-			} catch (e) {}
+		if (!this.bookData || this.currentLocStart === undefined) return;
+		// Only advance the furthest-read position — never move it backward.
+		// Jumping to a search result or TOC entry at an earlier page must not
+		// overwrite progress the user has already made.
+		var prev = this.bookData.locationsCompleted || 0;
+		if (this.currentLocStart <= prev) return;
 
-			// Push to WebDAV sync (fire and forget)
-			PapyrusSyncManager.pushPosition(this.bookData.title, this.bookData.author, this.bookData.epubIdentifier || null, this.currentLocStart, this.getBookmarksForSync());
-		}
+		this.bookData.locationsCompleted = this.currentLocStart;
+		try {
+			var libraryJson = localStorage.getItem("ereader_library");
+			var library = libraryJson ? JSON.parse(libraryJson) : [];
+			for (var i = 0; i < library.length; i++) {
+				if (library[i].asin === this.bookData.asin) {
+					library[i].locationsCompleted = this.currentLocStart;
+					library[i].lastAccessed = Date.now();
+					break;
+				}
+			}
+			localStorage.setItem("ereader_library", JSON.stringify(library));
+		} catch (e) {}
+
+		PapyrusSyncManager.pushPosition(this.bookData.title, this.bookData.author, this.bookData.epubIdentifier || null, this.currentLocStart, this.getBookmarksForSync());
 	},
 
 	handleMouseDown: function(inSender, inEvent) {
@@ -605,5 +612,31 @@ enyo.kind({
 
 	getCurrentPosition: function() {
 		return this.currentLocStart;
+	},
+
+	handleSharePage: function() {
+		var text = this.$.body.getPageText();
+		var title = (this.bookData && this.bookData.title) ? this.bookData.title : "Book";
+		var subject = "From: " + title;
+
+		if (window.PalmSystem && this.$.emailService) {
+			try {
+				this.$.emailService.call({
+					id: "com.palm.app.email",
+					params: {
+						summary: subject,
+						text: text
+					}
+				});
+			} catch (e) {
+				this.log("BookReader: email service error: " + e);
+			}
+		} else if (navigator.share) {
+			navigator.share({ title: subject, text: text }).catch(function() {});
+		} else {
+			var body = text.length > 1800 ? text.slice(0, 1800) + "…" : text;
+			window.location.href = "mailto:?subject=" + encodeURIComponent(subject) +
+			                       "&body=" + encodeURIComponent(body);
+		}
 	}
 });

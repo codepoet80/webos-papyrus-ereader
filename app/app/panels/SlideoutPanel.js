@@ -259,7 +259,7 @@ enyo.kind({
 				location: lastReadPos,
 				components: [{
 					kind: "VFlexBox", components: [
-						{content: $L("Last read position"), className: "markup-text", style: "font-style: italic;"},
+						{content: $L("Furthest read position"), className: "markup-text", style: "font-style: italic;"},
 						{content: this._pct(lastReadPos), className: "markup-location"}
 					]
 				}]

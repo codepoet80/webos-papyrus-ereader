@@ -14,7 +14,8 @@ enyo.kind({
 			{name: "toc", kind: "ereader.reading.BookInfoItem", actionName: $L("Table of Contents"), onActionSelected: "handleActionSelection"},
 			{name: "begin", kind: "ereader.reading.BookInfoItem", actionName: $L("Beginning"), onActionSelected: "handleActionSelection"},
 			{name: "loc", kind: "ereader.reading.BookInfoItem", actionName: $L("Location..."), onActionSelected: "handleActionSelection"},
-			{name: "markup", kind: "ereader.reading.BookInfoItem", actionName: $L("Bookmarks"), onActionSelected: "handleActionSelection"}
+			{name: "markup", kind: "ereader.reading.BookInfoItem", actionName: $L("Bookmarks"), onActionSelected: "handleActionSelection"},
+			{name: "share", kind: "ereader.reading.BookInfoItem", actionName: $L("Share Page"), onActionSelected: "handleActionSelection"}
 		]},
 		{className: "balloon-bottom"}
 	],

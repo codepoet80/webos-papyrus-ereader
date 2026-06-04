@@ -436,13 +436,10 @@ enyo.kind({
 	saveReadingPosition: function() {
 		if (this.currentBook && this.$.reader) {
 			var position = this.$.reader.getCurrentPosition();
-			if (position !== undefined) {
+			if (position !== undefined && position > (this.currentBook.locationsCompleted || 0)) {
 				this.currentBook.locationsCompleted = position;
 				this.currentBook.lastAccessed = Date.now();
-				// Save to localStorage
 				this.updateBookInLibrary(this.currentBook);
-				// Push to sync server so backgrounding/killing the PWA doesn't leave
-				// the server behind the local position (fire-and-forget).
 				var book = this.currentBook;
 				PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, position, []);
 			}
@@ -1033,8 +1030,27 @@ enyo.kind({
 	},
 
 	handleSearchQueried: function(inSender, searchText) {
-		this.storedSearchText = searchText;
-		this.storedSearchTextChanged();
+		// Guard: SearchView.doSearch() fires onSearchQueried back up through
+		// SlideoutPanel, which would re-enter here and cause infinite recursion.
+		if (this._searchInProgress) return;
+
+		var text = searchText && searchText.trim();
+		this.storedSearchText = text || "";
+		if (!text || text.length < 2) return;
+
+		this.log("Main: handleSearchQueried '" + text + "'");
+
+		this._searchInProgress = true;
+		try {
+			this.showToaster("search");
+			var sv = this.$.slideoutContents && this.$.slideoutContents.$.searchView;
+			if (sv) {
+				sv.$.searchInput.setValue(text);
+				sv.doSearch();
+			}
+		} finally {
+			this._searchInProgress = false;
+		}
 	},
 
 	handleMarkupsResultSelected: function(inSender, result) {
@@ -1119,8 +1135,7 @@ enyo.kind({
 	},
 
 	handleLocalPositionUpdated: function(inSender, position) {
-		// Save reading position periodically
-		if (this.currentBook) {
+		if (this.currentBook && position > (this.currentBook.locationsCompleted || 0)) {
 			this.currentBook.locationsCompleted = position;
 		}
 	},
@@ -1151,7 +1166,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v88)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v90)");
 		this.$.aboutPopup.openAtCenter();
 	},
 

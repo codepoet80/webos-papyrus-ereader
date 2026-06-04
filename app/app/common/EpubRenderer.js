@@ -342,6 +342,12 @@ enyo.kind({
 		}
 	},
 
+	getPageText: function() {
+		var container = this.$.pageContainer.hasNode();
+		if (!container) return "";
+		return container.innerText || container.textContent || "";
+	},
+
 	/**
 	 * Check if page content is effectively blank
 	 * Returns true if page contains only whitespace, empty tags, or non-visible content
