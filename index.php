@@ -6,7 +6,7 @@
 //App Details
 $title = "Papyrus";
 $subtitle = " | A beautiful eReader for webOS -- and everywhere else";
-$description = "Papyrus is a port of the original Kindle Beta app for HP's webOS TouchPad tablet, provided by webOS Archive for retro and modern devices.";
+$description = "Papyrus is a remix of the original Kindle Beta app for HP's webOS TouchPad tablet, providing a beautiful reading experience for DRM-free ePub content. It works on both legacy webOS and modern devices.";
 $github = "https://github.com/codepoet80/webos-papyrus-ereader";
 $pwaLink = "https://papyrus.wosa.link/app";
 $githubLink = "https://github.com/codepoet80/webos-papyrus-ereader/releases";
