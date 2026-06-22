@@ -434,15 +434,26 @@ enyo.kind({
 	},
 
 	saveReadingPosition: function() {
-		if (this.currentBook && this.$.reader) {
-			var position = this.$.reader.getCurrentPosition();
-			if (position !== undefined && position > (this.currentBook.locationsCompleted || 0)) {
-				this.currentBook.locationsCompleted = position;
-				this.currentBook.lastAccessed = Date.now();
-				this.updateBookInLibrary(this.currentBook);
-				var book = this.currentBook;
-				PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, position, []);
-			}
+		if (!this.currentBook || !this.$.reader) return;
+
+		// Fold in the current page in case it is somehow ahead of the in-memory
+		// high-water mark (handleLocalPositionUpdated normally keeps them in sync).
+		var position = this.$.reader.getCurrentPosition();
+		if (position !== undefined && position > (this.currentBook.locationsCompleted || 0)) {
+			this.currentBook.locationsCompleted = position;
+		}
+		this.currentBook.lastAccessed = Date.now();
+		this.updateBookInLibrary(this.currentBook);
+
+		// Always push the durable high-water mark on exit / deactivate, even when
+		// locationsCompleted was already advanced (and persisted) per page turn by
+		// handleLocalPositionUpdated.  The old code gated the push behind the same
+		// guard as the local write, so once the in-memory value advanced the server
+		// was never updated and other devices fell behind.
+		var book = this.currentBook;
+		var highWater = book.locationsCompleted || 0;
+		if (highWater > 0) {
+			PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, highWater, []);
 		}
 	},
 
@@ -1135,9 +1146,49 @@ enyo.kind({
 	},
 
 	handleLocalPositionUpdated: function(inSender, position) {
+		// Advance the high-water mark and persist it to localStorage on EVERY page
+		// turn — not just on exit.  saveReadingPosition() runs only on clean exit /
+		// window deactivate, and (a) those handlers do not reliably fire when the
+		// app card is swiped away on webOS, and (b) its guard compares against the
+		// value we set here, so it can never re-persist forward progress.  Writing
+		// here makes the furthest-read position durable regardless of connectivity
+		// or whether an exit handler ever fires.  Guarded by ">" so backward
+		// navigation (search / TOC jumps) never lowers the saved position.
 		if (this.currentBook && position > (this.currentBook.locationsCompleted || 0)) {
 			this.currentBook.locationsCompleted = position;
+			this.currentBook.lastAccessed = Date.now();
+			this.updateBookInLibrary(this.currentBook);
+			this.maybeBackgroundSync();
 		}
+	},
+
+	// Tunables for the in-session background sync push.
+	SYNC_PUSH_EVERY_N_TURNS: 5,
+	SYNC_PUSH_MIN_INTERVAL_MS: 30000,
+
+	/**
+	 * Best-effort server push while reading, so a mid-session app kill (swipe-away,
+	 * tab close) does not strand the WebDAV server at a stale position until the
+	 * next clean exit.  Local persistence already happens every page turn
+	 * (handleLocalPositionUpdated); this only governs the network push.
+	 *
+	 * Fires at most once per SYNC_PUSH_EVERY_N_TURNS forward page turns AND never
+	 * more often than SYNC_PUSH_MIN_INTERVAL_MS apart.  The time floor means
+	 * rapidly flipping through pages to find something (many turns in a few
+	 * seconds) does not hammer the server or trip ownCloud 423 locks (see fix #18).
+	 */
+	maybeBackgroundSync: function() {
+		this._turnsSincePush = (this._turnsSincePush || 0) + 1;
+		if (this._turnsSincePush < this.SYNC_PUSH_EVERY_N_TURNS) return;
+		this._turnsSincePush = 0;
+
+		var now = Date.now();
+		if (this._lastBgPushTime && (now - this._lastBgPushTime) < this.SYNC_PUSH_MIN_INTERVAL_MS) return;
+		this._lastBgPushTime = now;
+
+		var book = this.currentBook;
+		this.log("Sync: background push at position=" + (book.locationsCompleted || 0));
+		PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, book.locationsCompleted || 0, []);
 	},
 
 	// ========================================
@@ -1166,7 +1217,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v91)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v92)");
 		this.$.aboutPopup.openAtCenter();
 	},
 

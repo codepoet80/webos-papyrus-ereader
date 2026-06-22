@@ -294,6 +294,14 @@ enyo.kind({
 				self.log("Sync: jumping to remote position " + remote.position);
 				self.$.body.goToLocation(remote.position);
 				enyo.windows.addBannerMessage("Sync: resumed at " + Math.round(remote.position / 100) + "%", "{}", "icon.png");
+			} else if (localPos > remote.position) {
+				// Local is ahead of the server — typically because an earlier push
+				// failed (e.g. the app was swiped away with no connectivity).  Push
+				// the local high-water mark up so the server catches up now that we
+				// are online, instead of leaving it stale for other devices.
+				self.log("Sync: local position " + localPos + " is ahead of remote " + remote.position + " — pushing up");
+				PapyrusSyncManager.pushPosition(self.bookData.title, self.bookData.author, self.bookData.epubIdentifier || null, localPos, self.getBookmarksForSync());
+				enyo.windows.addBannerMessage("Sync: position is up to date", "{}", "icon.png");
 			} else {
 				self.log("Sync: local position is current, no jump needed");
 				enyo.windows.addBannerMessage("Sync: position is up to date", "{}", "icon.png");

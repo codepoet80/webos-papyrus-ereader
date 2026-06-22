@@ -545,6 +545,26 @@ CSS `br + br + br` counts adjacent sibling **elements**, ignoring text nodes. Wi
 
 Label in the Bookmarks panel updated from "Last read position" to "Furthest read position".
 
+### 25. Reading Position Lost on Swipe-Away — Save Guard Defeated by In-Memory High-Water (`Main.js`, `BookReader.js`)
+
+**Problem:** Read a book from 75% to 85%, swipe the app card away (so sync does not fire or fails for lack of connectivity), reopen — the book shows 85% for a moment and then snaps back to 75%. Felt like sync was overwriting the position, but the sync-pull guard (`remote.position > localPos`) was actually correct. The position was never durably saved in the first place.
+
+**Root cause:** The furthest-read position was only ever written to `localStorage` by `saveReadingPosition()`, which runs on clean exit / window deactivate. But:
+1. `Main.handleLocalPositionUpdated()` advances `this.currentBook.locationsCompleted` **in memory on every page turn** — no `localStorage` write.
+2. `saveReadingPosition()` then guards with `if (position > this.currentBook.locationsCompleted)`. Because step 1 already set `locationsCompleted` equal to the current page, the guard is **always false**, so it never wrote to `localStorage` and never pushed to the server.
+
+So the new position lived only in the killed process's memory. `localStorage` and the server both kept the old value. Network sync was the *only* path that ever persisted progress; when it failed, the read position was lost. (This also reveals fix #24's description was wrong: `handleLocalPositionUpdated` was an in-memory-only path, not a `localStorage` write path.)
+
+**Fix:**
+- `Main.handleLocalPositionUpdated()` now calls `updateBookInLibrary()` on every forward advance, persisting the high-water mark to `localStorage` per page turn — durable regardless of connectivity or whether an exit handler ever fires. Still guarded by `>` so backward navigation never lowers it.
+- `Main.saveReadingPosition()` decoupled the server push from the local-write guard: it now always pushes the current high-water mark on exit/deactivate, even when `locationsCompleted` was already advanced in memory.
+- `BookReader.syncPullPosition()` (auto-pull on open) now pushes the local position **up** to the server when local is ahead of remote (the stale-server case), instead of doing nothing.
+- `Main.maybeBackgroundSync()` adds a throttled in-session server push so a mid-reading kill does not strand the server at a stale position. Fires at most once per `SYNC_PUSH_EVERY_N_TURNS` (5) forward page turns AND no more often than `SYNC_PUSH_MIN_INTERVAL_MS` (30s) apart — the time floor keeps rapid page-flipping (searching for something) from hammering the WebDAV server or tripping ownCloud 423 locks (fix #18). Local persistence is still every page turn; only the network push is throttled.
+
+**Push triggers (server), full set:** book open (push-up if local ahead), every 5 page turns / 30s while reading (`maybeBackgroundSync`), leaving reader, window deactivate/blur, manual Sync Now. **Pull:** book open only.
+
+**Deploy note:** This is JS-only. Bump `CACHE_NAME`/build string and redeploy; verify clients aren't served a stale `serviceworker.js` (see fix #15).
+
 ---
 
 ## Implementation Status
