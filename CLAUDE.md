@@ -540,7 +540,7 @@ CSS `br + br + br` counts adjacent sibling **elements**, ignoring text nodes. Wi
 
 **Fix:** All three write sites for `locationsCompleted` now guard with `if (newPos > prev) { update }`:
 - `BookReader.saveReadingPosition()`
-- `Main.handleLocalPositionUpdated()` — fires on every page turn; this was the live write path
+- `Main.handleLocalPositionUpdated()` — fires on every page turn (in-memory only at the time; see #25, which made it also write `localStorage`)
 - `Main.saveReadingPosition()` — called on app backgrounding
 
 Label in the Bookmarks panel updated from "Last read position" to "Furthest read position".
@@ -564,6 +564,15 @@ So the new position lived only in the killed process's memory. `localStorage` an
 **Push triggers (server), full set:** book open (push-up if local ahead), every 5 page turns / 30s while reading (`maybeBackgroundSync`), leaving reader, window deactivate/blur, manual Sync Now. **Pull:** book open only.
 
 **Deploy note:** This is JS-only. Bump `CACHE_NAME`/build string and redeploy; verify clients aren't served a stale `serviceworker.js` (see fix #15).
+
+**Tunables:** `SYNC_PUSH_EVERY_N_TURNS` (5) and `SYNC_PUSH_MIN_INTERVAL_MS` (30000) are class fields on `ereader.Main` in `Main.js`, right above `maybeBackgroundSync()`.
+
+**Status / resume here (as of build v92, ipk `com.palm.codepoet.papyrus_1.3.4_all.ipk`):**
+- Code complete and packaged. Build bumped v91 → v92. **NOT yet verified on a real device** — this was the stopping point.
+- **Verify the original repro:** open a book ~75%, read to ~85%, swipe the app card away (no clean exit, or with no connectivity), reopen. Expected: stays at 85% (was snapping back to 75%). The local `localStorage` write per page turn is what makes this hold even when sync fails.
+- **Verify background push throttle:** with sync enabled and reachable, watch `palm-log -f com.palm.codepoet.papyrus` for `Sync: background push at position=` lines — should appear ~every 5 pages while reading and be suppressed during rapid page-flipping (the 30s floor).
+- **Watch for stale SW:** confirm About dialog shows `(build v92)` on the test device; if it shows v91 the device is running cached code, not this fix (see #15).
+- **Open follow-up (not done, optional):** background push and the exit/deactivate push can both fire within ~30s of each other (harmless idempotent PUTs; SyncManager has 423 retry). If desired, have `Main.saveReadingPosition()` stamp `this._lastBgPushTime = Date.now()` after it pushes so the throttle counts pushes of any kind. Skipped to avoid cross-method coupling.
 
 ---
 
