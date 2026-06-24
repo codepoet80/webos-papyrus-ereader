@@ -304,6 +304,14 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 						enyo.warn("Image data invalid/empty.");
 						break;
 					}
+					// On webOS, btoa() is O(n²) for large byte arrays — skip images above
+					// 1MB to prevent multi-hour import hangs. Matches getCoverImage() guard.
+					if (typeof window !== 'undefined' && window.PalmSystem && bytes.length > 1048576) {
+						enyo.warn("HTMLBook: image too large (" + Math.round(bytes.length/1024) + "KB) for webOS, skipping");
+						this.imgNameBuffer.push(label);
+						breakForWebOS = false;
+						break;
+					}
 					//Storing the bytes in the DB and in the array
 					var name = "img" + Database.makeSaneName(label);
 					this.storedImageCount += 1;

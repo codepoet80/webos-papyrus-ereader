@@ -480,8 +480,18 @@ EpubReader.prototype.getDataContent = function(state) {
 		//Fetching the next fragment
 		loadWorker.bind(this, state, null, null).defer();
 	} else {
-		//We asynchronously decompress, and call the loadWorker afterwards
-		zipped.file.uncompressAsync(loadWorker.bind(this, state, load));	
+		// On webOS, skip decompressing images that are too large to btoa() without
+		// hanging. HTMLBook.tagWorker has a matching guard. 1MB matches its threshold.
+		var isWebOS = typeof window !== 'undefined' && typeof window.PalmSystem !== 'undefined';
+		if (isWebOS && state.mode === 2 && zipped.file.uSize > 1048576) {
+			enyo.warn("EpubReader: skipping oversized image " + load.href +
+				" (" + Math.round(zipped.file.uSize / 1024) + "KB) on webOS");
+			load.data = null;
+			loadWorker.bind(this, state, null, null).defer();
+		} else {
+			//We asynchronously decompress, and call the loadWorker afterwards
+			zipped.file.uncompressAsync(loadWorker.bind(this, state, load));
+		}
 	}
 }
 
