@@ -478,6 +478,8 @@ The import pipeline is fragile in ways that are not obvious from static code ana
 
 **The `asyncHandled` pattern was tried and reverted.** A session attempted to fix a btoa hang on a large cover image (Star Trek Picard, 1.44MB decompressed) by making all image encoding async-chunked. This was reverted because it made typical imports 3× slower. If the large-image btoa hang is revisited, the fix must be gated by image size — not applied universally.
 
+**The correct fix for oversized images is a skip guard — see fix #26.**
+
 ### 20. `<font>` Tag Override — Font Controls Ignored by Old ePubs (`common.css`)
 
 **Problem:** ePubs produced by early Sigil, calibre, and PDF-to-ePub converters use deprecated HTML `<font face="..." size="...">` tags for all text. The `face` and `size` attributes act as element-level style declarations and override CSS inheritance from the container. `EpubRenderer.applyFont()` sets `font-family` and `font-size` as inline styles on `.epub-page-container`, but `<font>` elements inside the container ignore those inherited values entirely. Result: the user's font face and font size controls have no visible effect on the text. As a secondary symptom, `<br/>` tags (which use the *container's* line-height) did respond to font size changes, so increasing size only made paragraph spacing larger without making text bigger.
@@ -576,6 +578,37 @@ So the new position lived only in the killed process's memory. `localStorage` an
 
 ---
 
+### 26. Oversized Image Skip — Hour-Long Import on ePubs with Large Covers (`HTMLBook.js`, `EpubReader.js`)
+
+**Problem:** `HTMLBook.tagWorker` called `bytesToBase64(bytes)` synchronously when it encountered any `<img label>` tag, with no size guard. For ePubs with a cover image over ~1MB (e.g. Star Trek Available Light, 2.4MB JPEG), this triggered the O(n²) `btoa()` path on webOS old WebKit and caused the import to hang for over an hour. `EpubReader.getCoverImage()` already had a 1.5MB guard for the library thumbnail, but the rendering/storage path in `tagWorker` had none.
+
+**Two-part fix:**
+
+*1. `HTMLBook.tagWorker` (`src/display/HTMLBook.js`)* — after the `bytes == null` check, skip images above 1MB on webOS: push the label into `imgNameBuffer` (so it is never retried), set `breakForWebOS = false`, and `break`. The image is not stored in WebSQL; it will appear blank when reading on webOS, which is acceptable.
+
+*2. `EpubReader.getDataContent` (`src/pdb/EpubReader.js`)* — before calling `uncompressAsync`, check `zipped.file.uSize > 1048576` and skip decompression on webOS (calls `loadWorker` with `null` data immediately). Saves ~1–2 seconds of DEFLATE work on top of the btoa fix. Both guards use `typeof window !== 'undefined' && window.PalmSystem` for webOS detection.
+
+**Threshold:** 1MB (1,048,576 bytes) on webOS; no limit on other platforms. Matches the spirit of `getCoverImage()`'s 1.5MB guard. Images under 1MB (the vast majority of in-chapter images) are unaffected.
+
+**Effect on cover thumbnail:** Covers above 1.5MB are already skipped by `getCoverImage()` (existing guard) and will show no thumbnail in the library on webOS. The cover page in the book also shows blank on webOS when the cover image exceeds 1MB. Both show normally on PWA/desktop (fast btoa, no limit).
+
+**Font files:** Font TTFs in the manifest are already excluded from import — they don't pass the `entry.type.startsWith("image/")` check in `getDataContent` and are never loaded or btoa-encoded. No action needed for fonts.
+
+### 27. Enyo Package Size — Unused Locale Data Removed
+
+The `.ipk` grew to ~7MB partly because `enyo/build/g11n/` contained 2.7MB of locale data files, most for features the app never uses.
+
+**What was deleted (safe to remove — zero references in app code):**
+- `enyo/build/g11n/phone/` — 1.9MB, country phone-number format data
+- `enyo/build/g11n/address/` — 116K, address format data
+- `enyo/build/g11n/name/` — 92K, name format data
+- `enyo/build/g11n/css/` — 8K, unreferenced
+- `images/test-pages.png` and `images/test-pages-2.png` — 528K combined, Kindle test assets
+
+**What was kept:** `enyo/build/g11n/base/` (600K) — all four subdirs (`formats/`, `datetime_data/`, `character_data/`, `number_data/`) are loaded at runtime via synchronous XHR by `enyo.g11n.DateFmt` (list-view "Opened" dates) and `enyo.g11n.NumberFmt` (location percentage). Removing `base/` would cause those formatters to silently return `undefined`.
+
+**`enyo/lib/`** (2.4MB: telephony, authlib, contacts, print, wifi) is also unused but was NOT removed in this pass — it is separate from `enyo/build/` and warrants a dedicated verification pass before deletion.
+
 ## Implementation Status
 
 ### Completed
@@ -608,6 +641,8 @@ So the new position lived only in the killed process's memory. `localStorage` an
 - [x] Pop-balloon popup white rectangle fixed on webOS (theme class propagation + `-webkit-border-image: none`)
 - [x] Search within book wired end-to-end (toolbar → panel → EpubRenderer, re-entrancy guard)
 - [x] Furthest read position bookmark (high-water mark, never moves backward)
+- [x] Oversized image skip: ePubs with large covers (>1MB) now import in normal time on webOS
+- [x] Enyo package size: removed unused g11n locale data (phone/address/name) and test images (~2.6MB savings)
 
 ### Not Yet Implemented
 - [ ] Location slider navigation
