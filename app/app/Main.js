@@ -1209,7 +1209,7 @@ enyo.kind({
 	},
 
 	showAbout: function() {
-		var version = "1.3.3";
+		var version = "1.4.0";
 		try {
 			var appInfo = enyo.fetchAppInfo();
 			if (appInfo && appInfo.version) {
@@ -1217,7 +1217,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v99)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v107)");
 		this.$.aboutPopup.openAtCenter();
 	},
 

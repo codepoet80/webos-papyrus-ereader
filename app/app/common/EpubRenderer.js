@@ -349,6 +349,147 @@ enyo.kind({
 	},
 
 	/**
+	 * Return the word under the given viewport (client) coordinates, or "".
+	 * Used by the dictionary look-up feature (Define mode).
+	 *
+	 * Implementation: a geometric hit-test.  We walk the page container's own
+	 * text nodes and, using per-character Range rects, find the glyph the tap
+	 * landed on (or the nearest glyph on that line).  This is self-contained —
+	 * it only ever inspects text INSIDE the page container — so it is immune to
+	 * overlays intercepting caretRangeFromPoint, and it works identically on
+	 * webOS old WebKit and modern browsers.
+	 *
+	 * On failure it records a short reason in getLastWordFailReason() so callers
+	 * can surface it for diagnosis.
+	 */
+	getWordAt: function(clientX, clientY) {
+		this.clearWordHighlight();
+		this._lastWordFailReason = "";
+
+		var container = this.$.pageContainer.hasNode();
+		if (!container) { this._lastWordFailReason = "no container"; return ""; }
+
+		var hit = this._charAt(container, clientX, clientY);
+		if (!hit) { this._lastWordFailReason = "no glyph at " + Math.round(clientX) + "," + Math.round(clientY); return ""; }
+
+		var result = this._expandWord(hit.node, hit.index);
+		if (!result || !result.word) { this._lastWordFailReason = "not a word char"; return ""; }
+
+		this._applyHighlight(result.range);
+		this.log("getWordAt: picked '" + result.word + "'");
+		return result.word;
+	},
+
+	getLastWordFailReason: function() {
+		return this._lastWordFailReason || "";
+	},
+
+	// Find the text node + character index whose glyph rect is under (x, y),
+	// or the nearest glyph on the same line.  Returns {node, index} or null.
+	_charAt: function(container, x, y) {
+		var TOL = 3;
+		var walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+		var node, best = null, bestDist = Infinity;
+		while ((node = walker.nextNode())) {
+			var val = node.nodeValue || "";
+			if (!val.replace(/\s/g, "").length) continue;
+
+			var range = document.createRange();
+			range.selectNodeContents(node);
+
+			// Quick reject: does any line rect of this node sit near y?
+			var rects = range.getClientRects();
+			var onLine = false;
+			for (var r = 0; r < rects.length; r++) {
+				var rc = rects[r];
+				if (y >= rc.top - TOL && y <= rc.bottom + TOL) { onLine = true; break; }
+			}
+			if (!onLine) continue;
+
+			// Scan characters on the tapped line.
+			for (var i = 0; i < val.length; i++) {
+				range.setStart(node, i);
+				range.setEnd(node, i + 1);
+				var cr = range.getBoundingClientRect();
+				if (!cr || (cr.width === 0 && cr.height === 0)) continue;
+				if (y < cr.top - TOL || y > cr.bottom + TOL) continue;   // different line
+				if (x >= cr.left - TOL && x <= cr.right + TOL) {
+					return { node: node, index: i };
+				}
+				var cx = (cr.left + cr.right) / 2;
+				var d = Math.abs(cx - x);
+				if (d < bestDist) { bestDist = d; best = { node: node, index: i }; }
+			}
+		}
+		return best;
+	},
+
+	// Expand from a character index to the full word; returns {word, range}.
+	_expandWord: function(node, index) {
+		var text = node.nodeValue || "";
+		if (!text) return null;
+		if (index < 0) index = 0;
+		if (index >= text.length) index = text.length - 1;
+
+		var isWordChar = function(ch) { return /[A-Za-z0-9À-ɏ’'\-]/.test(ch); };
+
+		// If we landed just off a word (a space/punctuation), nudge to a neighbour.
+		if (!isWordChar(text.charAt(index))) {
+			if (index > 0 && isWordChar(text.charAt(index - 1))) index--;
+			else if (index < text.length - 1 && isWordChar(text.charAt(index + 1))) index++;
+			else return null;
+		}
+
+		var start = index, end = index;
+		while (start > 0 && isWordChar(text.charAt(start - 1))) start--;
+		while (end < text.length && isWordChar(text.charAt(end))) end++;
+
+		var word = this._cleanWord(text.substring(start, end));
+		if (!word) return null;
+
+		var range = document.createRange();
+		range.setStart(node, start);
+		range.setEnd(node, end);
+		return { word: word, range: range };
+	},
+
+	_cleanWord: function(s) {
+		if (!s) return "";
+		// First whitespace-delimited token, then strip surrounding punctuation.
+		var tok = String(s).replace(/\s+/g, " ").trim().split(" ")[0] || "";
+		tok = tok.replace(/^[^A-Za-z0-9À-ɏ]+/, "").replace(/[^A-Za-z0-9À-ɏ'’\-]+$/, "");
+		return tok;
+	},
+
+	// Wrap the word's range in a highlight span so the tapped word is visibly
+	// marked while the definition is looked up / shown.  Cleared on popup close
+	// or on the next lookup; a page navigation re-renders innerHTML and drops it.
+	_applyHighlight: function(range) {
+		try {
+			var span = document.createElement("span");
+			span.className = "define-highlight";
+			range.surroundContents(span);
+			this._highlightSpan = span;
+		} catch (e) {
+			// surroundContents throws if the range crosses element boundaries.
+			// Rare for a single word; skip the highlight but keep the lookup.
+			this._highlightSpan = null;
+			this.log("getWordAt: highlight surroundContents failed: " + e);
+		}
+	},
+
+	clearWordHighlight: function() {
+		var s = this._highlightSpan;
+		this._highlightSpan = null;
+		if (s && s.parentNode) {
+			var parent = s.parentNode;
+			while (s.firstChild) parent.insertBefore(s.firstChild, s);
+			parent.removeChild(s);
+			if (parent.normalize) { try { parent.normalize(); } catch (e) {} }
+		}
+	},
+
+	/**
 	 * Check if page content is effectively blank
 	 * Returns true if page contains only whitespace, empty tags, or non-visible content
 	 */

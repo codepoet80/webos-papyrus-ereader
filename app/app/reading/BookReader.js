@@ -25,20 +25,22 @@ enyo.kind({
 		{name: "top_row", kind: "ereader.top_row", className: "top-row-controls", onPageManipulation: "doPageManipulation", onLibrarySelected: "handleLibrarySelected", onSearchQueried: "handleSearchQueried", onBrightnessChanged: "handleBrightnessChanged", showing: false, onTypeSelection: "handleTypeSelection", onFontSizeChanged: "handleFontSizeChanged", onReaderThemeChanged: "handleReaderThemeChanged", onclick: "setHideOnceOne", onSearchBoxCollapsed: "setHideOnceTwo"},
 		{kind: "ereader.reading.DogEarButton", name: "readerDogear", onclick: "handleDogear", className: "reader-dogear", showing: false},
 		{name: "body", kind: "ereader.body", onmousedown: "handleMouseDown", style: "position: absolute; top: 0px; left: 0px; z-index: 50; width: 100%; height: 100%;", onTocAvailableChanged: "handleTocAvailableChanged", onPluginReady: "handlePluginReady", onBookmarkUpdated: "updateBookmarks", onLocationChanged: "handleLocationChanged", onShowOverlays: "showOverlays", onPluginStarted: "handlePluginStarted", onNotesShowingChanged: "handleNoteShowingChanged", onEndOfBook: "handleEndOfBook"},
-		{name: "bottom_row", kind: "ereader.bottom_row", className: "bottom-row-controls", onSlideOutSelected: "handleSlideOutSelected", onclick: "setHideOnceOne", showing: false, onLocationSelected: "handleLocationSelected", onTOCSelected: "handleTOCSelected", onPreviousLocationSelected: "handlePrevLocSelected", onSharePage: "handleSharePage"},
+		{name: "bottom_row", kind: "ereader.bottom_row", className: "bottom-row-controls", onSlideOutSelected: "handleSlideOutSelected", onclick: "setHideOnceOne", showing: false, onLocationSelected: "handleLocationSelected", onTOCSelected: "handleTOCSelected", onPreviousLocationSelected: "handlePrevLocSelected", onSharePage: "handleSharePage", onDefineModeToggle: "handleDefineModeToggle"},
 		{name: "dimCover", className: "dimCover", onclick: "handleDismissSlideout", showing: false},
 		{name: "loadingPopup", kind: "Popup", className: "spinner-popup", lazy: false, scrim: true, modal: true, components: [
 			{kind: "VFlexBox", align: "center", components: [
 				{kind: "Spinner", showing: true},
 				{name: "loadingText", content: "Loading book...", style: "color: white; margin-top: 10px;"}
 			]}
-		]}
+		]},
+		{name: "definitionPopup", kind: "ereader.reading.DefinitionPopup", lazy: false, onClosed: "handleDefinitionClosed"}
 	],
 
 	pluginReady: false,
 	pluginStarted: false,
 	bookData: null,
 	volumeKeysActive: false,
+	defineMode: false,
 
 	destroy: function() {
 		if (this._onKeyDown) {
@@ -220,6 +222,9 @@ enyo.kind({
 
 		// Stop listening for volume key events
 		this.stopVolumeKeyListener();
+
+		// Clear Define mode so it never persists back into the library / next book
+		this.setDefineMode(false);
 
 		// Always restore screen timeout when leaving the reader
 		this.applyScreenTimeout(false);
@@ -477,6 +482,7 @@ enyo.kind({
 		this.$.body.changeCSSClassesTo(themeClass);
 		this.$.bottom_row.changeCSSClassesTo(themeClass);
 		this.$.top_row.changeCSSClassesTo(themeClass);
+		this.$.definitionPopup.changeCSSClassesTo(themeClass);
 	},
 
 	handleBrightnessChanged: function(inSender, brightness) {
@@ -534,6 +540,15 @@ enyo.kind({
 			return;
 		}
 		this._lastMouseDownTime = now;
+
+		// Define mode: interpret this tap as a word selection for dictionary
+		// look-up, not a page turn.  Bypasses the zone logic (and the edge
+		// dead-zone) entirely.  Runs after the isTrusted/debounce guards so we
+		// only ever process one tap.
+		if (this.defineMode) {
+			this.handleDefineTap(inEvent);
+			return;
+		}
 
 		// Handle touch/click for page turning
 		// Tap zones: left 30% = prev, right 30% = next, center 40% = overlays
@@ -620,6 +635,62 @@ enyo.kind({
 
 	getCurrentPosition: function() {
 		return this.currentLocStart;
+	},
+
+	// ========================================
+	// DICTIONARY LOOK-UP (Define mode)
+	// ========================================
+
+	// Toggled from the book menu's "Define..." item.  The next page tap is
+	// captured as a word.  We deliberately KEEP the toolbars visible: in Define
+	// mode every page tap is a word look-up, so the book menu would otherwise be
+	// unreachable — leaving no way to toggle the mode back off.
+	handleDefineModeToggle: function() {
+		this.setDefineMode(!this.defineMode);
+		if (this.defineMode) {
+			if (!this.overlaysShowing) this.showOverlays();
+			enyo.windows.addBannerMessage($L("Tap a word to define"), "{}", "icon.png");
+		}
+	},
+
+	setDefineMode: function(on) {
+		this.defineMode = on;
+		this.$.bottom_row.setDefineChecked(on);
+	},
+
+	// A page tap while in Define mode.  Always leaves Define mode (one lookup
+	// per activation, even on failure), then resolves the tapped word.
+	handleDefineTap: function(inEvent) {
+		this.setDefineMode(false);
+		var x = (inEvent.clientX !== undefined) ? inEvent.clientX : inEvent.pageX;
+		var y = (inEvent.clientY !== undefined) ? inEvent.clientY : inEvent.pageY;
+		var word = this.$.body.getWordAt(x, y);
+		if (!word) {
+			var reason = this.$.body.getLastWordFailReason();
+			this.log("Define: no word at " + x + "," + y + " (" + reason + ")");
+			enyo.windows.addBannerMessage($L("No word there") + (reason ? " (" + reason + ")" : ""), "{}", "icon.png");
+			return;
+		}
+		this.lookupWord(word);
+	},
+
+	handleDefinitionClosed: function() {
+		// Remove the tapped-word highlight when the definition card is dismissed.
+		this.$.body.clearWordHighlight();
+	},
+
+	lookupWord: function(word) {
+		var self = this;
+		this.$.definitionPopup.showLoading(word);
+		PapyrusDictionary.lookup(word, function(err, entry) {
+			if (!err) {
+				self.$.definitionPopup.showDefinition(word, entry);
+			} else if (err === "notfound") {
+				self.$.definitionPopup.showError(word, $L("No definition found."));
+			} else {
+				self.$.definitionPopup.showError(word, $L("Couldn't reach the dictionary. Check your connection."));
+			}
+		});
 	},
 
 	handleSharePage: function() {

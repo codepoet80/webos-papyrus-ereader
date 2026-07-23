@@ -63,6 +63,7 @@ enyo.depends(
 	"app/common/EpubRenderer.js",
 	"app/common/FileImporter.js",
 	"app/common/SyncManager.js",
+	"app/common/Dictionary.js",
 	"app/common/ExpandingSearchBox.js",
 	"app/common/common.css",
 
@@ -88,6 +89,8 @@ enyo.depends(
 	"app/reading/FontBox.js",
 	"app/reading/BrightnessBox.js",
 	"app/reading/BookInfoPopup.js",
+	"app/reading/DefinitionPopup.js",
+	"app/reading/DefinitionPopup.css",
 	"app/reading/top_row.js",
 	"app/reading/bottom_row.js",
 	"app/reading/body.js",

@@ -14,7 +14,8 @@ enyo.kind({
 		onSlideOutSelected: "",
 		onTOCSelected: "",
 		onPreviousLocationSelected: "",
-		onSharePage: ""
+		onSharePage: "",
+		onDefineModeToggle: ""
 	},
 	components: [
 		{nodeTag: "hr", className:"hr-bottom"},
@@ -81,6 +82,9 @@ enyo.kind({
 			case "markup":
 				this.doSlideOutSelected("markups");
 				break;
+			case "define":
+				this.doDefineModeToggle();
+				break;
 			case "share":
 				this.doSharePage();
 				break;
@@ -121,6 +125,10 @@ enyo.kind({
 
 	setTocAvailable: function(available) {
 		this.$.bookMenu.setTocAvailability(available);
+	},
+
+	setDefineChecked: function(checked) {
+		this.$.bookMenu.setDefineChecked(checked);
 	},
 
 	handlePreviousLocationSelected: function(inSender) {

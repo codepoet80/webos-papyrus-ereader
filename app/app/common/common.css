@@ -1,6 +1,14 @@
 /* Commonly used styles */
 
 
+/* Dictionary Define-mode: highlight the tapped word.  Translucent so it reads
+   clearly over white, sepia, and black themes without overriding text color. */
+.epub-page-container .define-highlight {
+	background-color: rgba(255, 214, 0, 0.45);
+	border-radius: 3px;
+}
+
+
 /* EpubRenderer styling */
 .epub-renderer {
 	position: relative;

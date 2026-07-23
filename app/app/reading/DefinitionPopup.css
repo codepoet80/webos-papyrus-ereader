@@ -1,0 +1,96 @@
+/* Dictionary definition card (ereader.reading.DefinitionPopup) */
+
+.definitionBox {
+	position: absolute;
+	border: solid;
+	border-radius: 15px;
+	border-width: 4px;
+	overflow: hidden;
+	max-width: 90%;
+}
+
+/* Remove default enyo-popup border-image that causes square corners */
+.definitionBox.enyo-popup {
+	-webkit-border-image: none;
+	border-image: none;
+}
+
+.definitionWord {
+	font-size: 22px;
+	font-weight: bold;
+	text-align: left;
+}
+
+.definitionPhonetic {
+	font-size: 15px;
+	font-style: italic;
+	opacity: 0.7;
+	margin-top: 2px;
+	text-align: left;
+}
+
+.definitionScroller {
+	max-height: 300px;
+	overflow-y: auto;
+	overflow-x: hidden;
+	margin-top: 10px;
+	padding-left: 4px;
+	text-align: left;
+}
+
+.definitionBody .def-pos {
+	font-style: italic;
+	font-weight: bold;
+	margin: 8px 0 2px 0;
+	opacity: 0.8;
+}
+
+.definitionBody .def-list {
+	margin: 0 0 4px 0;
+	padding-left: 30px;
+	list-style-position: outside;
+}
+
+.definitionBody .def-list li {
+	margin-bottom: 6px;
+	line-height: 1.4;
+}
+
+.definitionBody .def-ex {
+	font-style: italic;
+	opacity: 0.65;
+	margin-top: 3px;
+}
+
+.definitionBody .definitionError,
+.definitionError {
+	padding: 10px 0;
+	opacity: 0.8;
+}
+
+.definitionClose {
+	margin-top: 14px;
+}
+
+/* --------- Themes --------- */
+
+.definitionBox.white {
+	background-color: #ffffff;
+	border-color: #cccccc;
+	color: #111111;
+}
+.definitionBox.white.enyo-popup { background-color: #ffffff; }
+
+.definitionBox.sepia {
+	background-color: #e7e3dd;
+	border-color: #ebc591;
+	color: #3a2f1c;
+}
+.definitionBox.sepia.enyo-popup { background-color: #e7e3dd; }
+
+.definitionBox.black {
+	background-color: #1a1a1a;
+	border-color: #444444;
+	color: #dddddd;
+}
+.definitionBox.black.enyo-popup { background-color: #1a1a1a; }

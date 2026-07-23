@@ -621,6 +621,18 @@ enyo.kind({
 		return this.$.epubRenderer.getPageText();
 	},
 
+	getWordAt: function(clientX, clientY) {
+		return this.$.epubRenderer.getWordAt(clientX, clientY);
+	},
+
+	clearWordHighlight: function() {
+		this.$.epubRenderer.clearWordHighlight();
+	},
+
+	getLastWordFailReason: function() {
+		return this.$.epubRenderer.getLastWordFailReason();
+	},
+
 	goToTableOfContents: function() {
 		this.$.epubRenderer.gotoTableOfContents();
 	},

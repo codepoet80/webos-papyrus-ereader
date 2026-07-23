@@ -307,6 +307,15 @@
 .bookinfo-popup .list-view-item {
 }
 
+/* Checkmark on an active menu item (Define mode).  Reuses webOS's own menu
+   checkmark asset — the same blue check the system menus use.  Right-aligned
+   so it reads like a native checked menu item; padding-right keeps the label
+   clear of the mark. */
+.bookinfo-checked {
+	background: url(../../enyo/build/palm/themes/Onyx/images/checkmark.png) center right no-repeat;
+	padding-right: 30px;
+}
+
 /* Brightness Popup */
 
 .brightness-popup {

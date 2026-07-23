@@ -15,6 +15,7 @@ enyo.kind({
 			{name: "begin", kind: "ereader.reading.BookInfoItem", actionName: $L("Beginning"), onActionSelected: "handleActionSelection"},
 			{name: "loc", kind: "ereader.reading.BookInfoItem", actionName: $L("Location..."), onActionSelected: "handleActionSelection"},
 			{name: "markup", kind: "ereader.reading.BookInfoItem", actionName: $L("Bookmarks"), onActionSelected: "handleActionSelection"},
+			{name: "define", kind: "ereader.reading.BookInfoItem", actionName: $L("Define..."), onActionSelected: "handleActionSelection"},
 			{name: "share", kind: "ereader.reading.BookInfoItem", actionName: $L("Share Page"), onActionSelected: "handleActionSelection"}
 		]},
 		{className: "balloon-bottom"}
@@ -35,6 +36,12 @@ enyo.kind({
 		else {
 			this.$.toc.disable();
 		}
+	},
+
+	// Show/hide the checkmark on the "Define..." item so the menu reflects
+	// whether Define mode is currently active.
+	setDefineChecked: function (checked) {
+		this.$.define.setChecked(checked);
 	}
 });
 
@@ -71,7 +78,15 @@ enyo.kind({
 		this.$.disableContent.hide();
 		this.render();
 	},
-	
+
+	// Mark the label when checked.  Uses webOS's own menu checkmark asset
+	// (the same blue check the system menus use) as a right-aligned background
+	// image, so it renders correctly on every platform and every theme — no
+	// font-dependent glyph.
+	setChecked: function (checked) {
+		this.$.actionName.addRemoveClass("bookinfo-checked", checked);
+	},
+
 	handleActionSelection: function(o) {
 		if (!this.disabled) {
 			this.doActionSelected(o.name);

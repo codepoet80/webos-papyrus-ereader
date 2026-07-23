@@ -28,6 +28,7 @@ The app is fully functional and ready for community testing.
 - Bookmarks via dog-ear button
 - Table of Contents panel
 - Search within book
+- Dictionary look-up (Book menu > Define..., then tap a word)
 - Settings persistence
 - Optional page turn animation (fade effect)
 - Auto-skip blank pages
@@ -609,6 +610,25 @@ The `.ipk` grew to ~7MB partly because `enyo/build/g11n/` contained 2.7MB of loc
 
 **`enyo/lib/`** (2.4MB: telephony, authlib, contacts, print, wifi) is also unused but was NOT removed in this pass — it is separate from `enyo/build/` and warrants a dedicated verification pass before deletion.
 
+### 28. Dictionary Look-up (Define mode) — Word Hit-Testing and webOS Font Caveats
+
+Tap a word in the reader to look up its definition. Entered from a **"Define..."** item in the book menu (`BookInfoPopup.js`); the next page tap resolves to a word, is looked up against dictionaryapi.dev, and is shown in a themed centered card. Mode auto-exits after one lookup (even on failure) or can be toggled off from the menu.
+
+**Files:** `app/common/Dictionary.js` (new — `PapyrusDictionary.lookup`), `app/reading/DefinitionPopup.js`/`.css` (new — the card), plus `EpubRenderer.js` (word hit-test), `body.js` (pass-throughs), `BookInfoPopup.js` + `bottom_row.js` (menu item + checkmark), `BookReader.js` (Define-mode state + tap intercept), `common.css` (highlight), `depends.js`.
+
+**Word hit-testing is geometric, NOT `caretRangeFromPoint` (`EpubRenderer.getWordAt`).** The caret API was tried first (both `caretRangeFromPoint` and a `Selection.modify` word-snap) and returned nothing usable on the target platform — every tap resolved outside the page container, almost certainly because an overlay intercepts the caret hit-test. The working implementation (`_charAt`) walks the page container's own text nodes via a `TreeWalker` and uses per-character `Range.getBoundingClientRect()` to find the glyph under the tap (nearest glyph on the line if the tap lands in a gap), then `_expandWord` grows to word boundaries. Because it only ever inspects text INSIDE `.epub-page-container`, no overlay can throw it off, and it behaves identically on webOS old WebKit and modern browsers. **Do not "simplify" this back to `caretRangeFromPoint`.** `getLastWordFailReason()` surfaces a short reason (shown in the banner) for diagnosing misses without device logs.
+
+**Tapped-word highlight:** the word's range is wrapped in a `.define-highlight` span (translucent yellow, `common.css`) while the definition shows; cleared on popup close (`onClosed` → `body.clearWordHighlight`) and dropped automatically when a page turn re-renders `innerHTML`.
+
+**webOS font caveats (all confirmed as tofu / placeholder boxes on the TouchPad):**
+- **IPA phonetic is suppressed on webOS** (`DefinitionPopup._pickPhonetic` returns `""` when `window.PalmSystem`). The old font set has no IPA coverage. Still shown on PWA/desktop.
+- **Menu checkmark uses webOS's own asset**, not a glyph. `U+2713` renders as a box, so `BookInfoItem.setChecked` toggles a `.bookinfo-checked` class whose background is `enyo/build/palm/themes/Onyx/images/checkmark.png` (the blue system-menu check, visible on all three menu themes; relative path from `BookReader.css` is `../../enyo/build/...`). An earlier "(on)" text suffix was rejected as ugly.
+- **Example quotes use straight `"`**, not curly, for the same reason.
+
+**Network:** `Dictionary.js` reuses the `SyncManager` XHR idiom — `Origin: null` header (webOS `file://`) and a one-time status-0 retry — for old-WebKit compatibility. No `fetch`/Promises. Fails gracefully to "No definition found" (404) / "Couldn't reach the dictionary" (status 0).
+
+**Chrome stays visible in Define mode** (`BookReader.handleDefineModeToggle`). In Define mode every page tap is a word look-up, so hiding the toolbars would make the book menu — the only manual way to toggle the mode off — unreachable. Do not hide overlays on entering Define mode.
+
 ## Implementation Status
 
 ### Completed
@@ -643,6 +663,7 @@ The `.ipk` grew to ~7MB partly because `enyo/build/g11n/` contained 2.7MB of loc
 - [x] Furthest read position bookmark (high-water mark, never moves backward)
 - [x] Oversized image skip: ePubs with large covers (>1MB) now import in normal time on webOS
 - [x] Enyo package size: removed unused g11n locale data (phone/address/name) and test images (~2.6MB savings)
+- [x] Dictionary look-up (Define mode): tap a word to define it (geometric hit-test, tapped-word highlight, webOS font caveats handled)
 
 ### Not Yet Implemented
 - [ ] Location slider navigation
