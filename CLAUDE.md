@@ -29,6 +29,7 @@ The app is fully functional and ready for community testing.
 - Table of Contents panel
 - Search within book
 - Dictionary look-up (Book menu > Define..., then tap a word)
+- Discuss in Claude (optional, off by default): Book menu > Discuss in Claude... opens the current page for discussion (webOS: hands off to the Claude Chat app if installed; PWA/desktop: opens claude.ai). Enable via Preferences > Enable AI Features
 - Settings persistence
 - Optional page turn animation (fade effect)
 - Auto-skip blank pages
@@ -629,6 +630,54 @@ Tap a word in the reader to look up its definition. Entered from a **"Define..."
 
 **Chrome stays visible in Define mode** (`BookReader.handleDefineModeToggle`). In Define mode every page tap is a word look-up, so hiding the toolbars would make the book menu — the only manual way to toggle the mode off — unreachable. Do not hide overlays on entering Define mode.
 
+### 29. Discuss in Claude — Optional Hand-off to the Claude Chat App
+
+Hands the current reading passage to the separate **Claude Chat** webOS app (`org.webosarchive.claudechat`, at `~/Projects/enyo2-claudechat`) so the user can discuss the book with Claude. Opt-in and gated, because some users don't want AI.
+
+**Gating (per platform, in `BookReader.updateClaudeMenuAvailability()`):**
+1. **Setting on** — `enableAIFeatures` in `ereader_settings`, **default OFF**, toggled in Preferences (`Settings.js`, "Enable AI Features" — a shared gate for any future AI features, not Claude-specific). Required on all platforms.
+2. **webOS** (`window.PalmSystem`): additionally requires **Claude Chat installed** — `detectClaudeApp()` calls `palm://com.palm.applicationManager/listApps` and sets `this.claudeInstalled` when it finds `org.webosarchive.claudechat` (`handleClaudeListApps`). Hand-off is app-to-app (see launch contract below).
+3. **PWA / browser** (no `PalmSystem`): setting-on is enough — there is no local app, so it opens the public **claude.ai** site instead (see web path below). No install check.
+
+`updateClaudeMenuAvailability()` calls `bottom_row.setClaudeAvailability()` → `BookInfoPopup.setClaudeAvailability()` → `this.$.claude.setShowing()`. Called on every `showOverlays()` so toggling the setting mid-session takes effect without reopening the book, and again when `listApps` resolves. The `claude` `BookInfoItem` ships `showing: false`.
+
+**Platform dispatch (`BookReader.launchClaudeChat`):** `window.PalmSystem` → `launchClaudeApp` (app hand-off); else → `openClaudeWeb`.
+
+**Menu wiring** mirrors "Share Page": `BookInfoPopup` item `claude` → `bottom_row` `onDiscussInClaude` → `BookReader.handleDiscussInClaude`.
+
+**Passage extraction — previous + current + next page (`EpubRenderer.getAdjacentPagesText`).** Current page is the live `getPageText()`. Adjacent pages are computed on **`preloaderFitter`** (the existing background PageFitter — never the user's `pageFitter`, so no visible page turn) synced to the current position, rendered into the hidden `preloadOffscreen` node purely to read `innerText`. Async (fitter binary search is callback-based). Cancels any in-flight preload first (`preloadToken++`); a later page turn reschedules preloading normally. Returns `""` for prev/next at book boundaries.
+
+**Launch contract.** `BookReader.launchClaudeChat()` calls `palm://com.palm.applicationManager/launch` with:
+```javascript
+{ id: "org.webosarchive.claudechat",
+  params: { mode: "bookchat", query: "",
+            title: encodeURIComponent(title), author: encodeURIComponent(author),
+            context: encodeURIComponent(prevCurNextText) } }
+```
+Values are URI-encoded so the receiver's `decodeURIComponent` round-trips them (matches Claude Chat's JustType `query` convention). `context` is capped at `CLAUDE_CONTEXT_MAX` (7000 chars) to stay under webOS launch-param size limits.
+
+**Web path (`BookReader.openClaudeWeb`, PWA / browser only).** No local app and no hidden-context channel, so the framing + passage are folded into one prompt and opened at `https://claude.ai/new?q=<encoded prompt>` via `window.open(url, "_blank")` (falls back to `location.href`). The passage is trimmed in a loop (~12%/pass) until the **fully-encoded URL** is under `CLAUDE_WEB_URL_MAX` (2000 chars) — NOT a raw-character cap: `encodeURIComponent` inflates text unpredictably (spaces/newlines → `%XX`), so only the encoded URL length actually bounds what the server sees, and an over-long URL risks a 414. The loop converges in a handful of passes (input is already ≤`CLAUDE_CONTEXT_MAX`). **Priority:** only the passage (`ctx`) is trimmed — the fixed `prefix` (title, author, framing) and `suffix` are never cut, so the model always gets book identity + intent and fits in as much passage as the URL budget allows. This assumes the modern web is reachable (true in PWA/desktop, never on webOS).
+
+**Receiver side (Claude Chat repo, separate app):**
+- `source/app.js` `_jtOnLaunchParams` branches on `lp.mode === "bookchat"` (distinct from a JustType search) and routes `{context, title, author}` to `App._appView.handleBookChat` (with a `_pendingBookChat` stash drained in `RootView.rendered`, same pattern as `_pendingQuery`).
+- `source/views/views.js` `ChatView.handleBookChat` starts a fresh conversation, stores the passage in-memory as `_bookContext` (NOT persisted; cleared by `newChat()` and `handleJustTypeQuery()`), adds a **persisted** "Let's talk about …" intro as a real assistant message (so it survives refreshes — e.g. after visiting History — and becomes the conversation's history preview), and — unlike JustType — does **not** auto-send; the user types their own question. `Conversation.getApiMessages()` strips leading non-user messages, so that intro (a leading assistant turn) is never sent to the API. No emoji/curly quotes in visible webOS text (tofu on the old font — see #28).
+- `_dispatch` layers the passage onto the system prompt via `_composeBookSystemPrompt(base, bc)` for that conversation only (the user's saved system prompt is untouched). The context rides in the **system prompt**, not as a visible transcript message, so it stays hidden but in scope for the whole discussion.
+- No `appinfo.json` change: a direct `applicationManager/launch` delivers `params` to `PalmSystem.launchParams` regardless of the `universalSearch` registration.
+- Caveat: Claude Chat silently routes to Settings if no API key is configured; the book context stays in memory so it still applies once a key is set.
+
+**Deploy:** JS-only on both apps. Bump each app's build/cache string and redeploy (Papyrus: `build.sh`; watch for stale service-worker cache per fix #15).
+
+**Status / resume here (end of 2026-07-24):**
+- Code complete on **both** apps; all files pass `node --check`. Changes are **uncommitted** in both working trees (Papyrus `webos-papyrus-ereader` and Claude Chat `~/Projects/enyo2-claudechat`) — nothing committed yet.
+- PWA was redeployed and confirmed loading (an "App init failed: … DefinitionPopup" error during testing was just a stale service-worker cache — resolved by a hard refresh, not a code bug; see fix #15).
+- App icons were replaced from `app/icon-256.png` (all `app/icons/*` + `app/icon.png`); `icons/512.png` is a 2× upscale (soft) and `meta/1005822/icon-256.png` (store copy) was intentionally left on the OLD design.
+- **Not yet verified — the point of the pending real-world tests:**
+  1. **webOS app-to-app hand-off** — book menu → "Discuss in Claude…" launches `org.webosarchive.claudechat` with the `mode:"bookchat"` params and Claude answers with passage context. (`.ipk` builds via `build.sh` but device install/verify pending.)
+  2. **PWA/desktop web path** — opens `claude.ai/new?q=…`. **Biggest unknown:** whether the `q=` prefill survives claude.ai's login redirect for a logged-out user. If it doesn't, revisit `openClaudeWeb`.
+  3. **Adjacent-page extraction** (`getAdjacentPagesText`) returns sensible prev/next text on real books (esp. at chapter/file boundaries and book start/end).
+  4. **Gating** — item hidden when "Enable AI Features" is off; on webOS also hidden when Claude Chat not installed; visible on PWA with the setting on.
+  5. **History preview** shows the intro/cue line, and the cue persists after visiting History (Claude Chat side).
+
 ## Implementation Status
 
 ### Completed
@@ -664,6 +713,7 @@ Tap a word in the reader to look up its definition. Entered from a **"Define..."
 - [x] Oversized image skip: ePubs with large covers (>1MB) now import in normal time on webOS
 - [x] Enyo package size: removed unused g11n locale data (phone/address/name) and test images (~2.6MB savings)
 - [x] Dictionary look-up (Define mode): tap a word to define it (geometric hit-test, tapped-word highlight, webOS font caveats handled)
+- [x] Discuss in Claude (optional, off by default): hands prev/current/next page + title/author to the Claude Chat app as hidden context via `applicationManager/launch` on webOS, or opens claude.ai with a prefilled prompt on PWA/desktop; gated by the Enable AI Features setting
 
 ### Not Yet Implemented
 - [ ] Location slider navigation

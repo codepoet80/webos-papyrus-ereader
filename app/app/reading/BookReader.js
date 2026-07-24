@@ -22,10 +22,14 @@ enyo.kind({
 
 		{name: "emailService", kind: "PalmService", service: "palm://com.palm.applicationManager/", method: "launch"},
 
+		// Claude Chat hand-off (optional, gated by the "Discuss with Claude" setting).
+		{name: "claudeService", kind: "PalmService", service: "palm://com.palm.applicationManager/", method: "launch"},
+		{name: "claudeListApps", kind: "PalmService", service: "palm://com.palm.applicationManager/", method: "listApps", onResponse: "handleClaudeListApps"},
+
 		{name: "top_row", kind: "ereader.top_row", className: "top-row-controls", onPageManipulation: "doPageManipulation", onLibrarySelected: "handleLibrarySelected", onSearchQueried: "handleSearchQueried", onBrightnessChanged: "handleBrightnessChanged", showing: false, onTypeSelection: "handleTypeSelection", onFontSizeChanged: "handleFontSizeChanged", onReaderThemeChanged: "handleReaderThemeChanged", onclick: "setHideOnceOne", onSearchBoxCollapsed: "setHideOnceTwo"},
 		{kind: "ereader.reading.DogEarButton", name: "readerDogear", onclick: "handleDogear", className: "reader-dogear", showing: false},
 		{name: "body", kind: "ereader.body", onmousedown: "handleMouseDown", style: "position: absolute; top: 0px; left: 0px; z-index: 50; width: 100%; height: 100%;", onTocAvailableChanged: "handleTocAvailableChanged", onPluginReady: "handlePluginReady", onBookmarkUpdated: "updateBookmarks", onLocationChanged: "handleLocationChanged", onShowOverlays: "showOverlays", onPluginStarted: "handlePluginStarted", onNotesShowingChanged: "handleNoteShowingChanged", onEndOfBook: "handleEndOfBook"},
-		{name: "bottom_row", kind: "ereader.bottom_row", className: "bottom-row-controls", onSlideOutSelected: "handleSlideOutSelected", onclick: "setHideOnceOne", showing: false, onLocationSelected: "handleLocationSelected", onTOCSelected: "handleTOCSelected", onPreviousLocationSelected: "handlePrevLocSelected", onSharePage: "handleSharePage", onDefineModeToggle: "handleDefineModeToggle"},
+		{name: "bottom_row", kind: "ereader.bottom_row", className: "bottom-row-controls", onSlideOutSelected: "handleSlideOutSelected", onclick: "setHideOnceOne", showing: false, onLocationSelected: "handleLocationSelected", onTOCSelected: "handleTOCSelected", onPreviousLocationSelected: "handlePrevLocSelected", onSharePage: "handleSharePage", onDefineModeToggle: "handleDefineModeToggle", onDiscussInClaude: "handleDiscussInClaude"},
 		{name: "dimCover", className: "dimCover", onclick: "handleDismissSlideout", showing: false},
 		{name: "loadingPopup", kind: "Popup", className: "spinner-popup", lazy: false, scrim: true, modal: true, components: [
 			{kind: "VFlexBox", align: "center", components: [
@@ -41,6 +45,7 @@ enyo.kind({
 	bookData: null,
 	volumeKeysActive: false,
 	defineMode: false,
+	claudeInstalled: false,   // set by handleClaudeListApps (webOS only)
 
 	destroy: function() {
 		if (this._onKeyDown) {
@@ -282,6 +287,10 @@ enyo.kind({
 
 		// Pull remote reading position; jump to it if it's further along
 		this.syncPullPosition();
+
+		// Detect the Claude Chat app so the optional "Discuss in Claude..." menu
+		// item can be shown (only when both installed and the setting is on).
+		this.detectClaudeApp();
 	},
 
 	syncPullPosition: function() {
@@ -414,6 +423,9 @@ enyo.kind({
 			this.$.body.overlayStateChange("showing");
 		}
 		this.hideOnce = false;
+		// Keep the Claude menu item in sync with the current setting each time the
+		// toolbar appears (the user may have toggled it since the book opened).
+		this.updateClaudeMenuAvailability();
 	},
 
 	hideOverlays: function() {
@@ -716,6 +728,149 @@ enyo.kind({
 			var body = text.length > 1800 ? text.slice(0, 1800) + "…" : text;
 			window.location.href = "mailto:?subject=" + encodeURIComponent(subject) +
 			                       "&body=" + encodeURIComponent(body);
+		}
+	},
+
+	// ========================================
+	// CLAUDE CHAT HAND-OFF (optional feature)
+	// ========================================
+
+	CLAUDE_APP_ID: "org.webosarchive.claudechat",
+	// Cap the passage sent as launch params so we stay well under any webOS
+	// launch-param size limit (three pages of text is normally a few KB).
+	CLAUDE_CONTEXT_MAX: 7000,
+
+	// True when the user's "Enable AI Features" preference is on. See
+	// updateClaudeMenuAvailability() for the per-platform combination.
+	isAIFeaturesEnabled: function() {
+		try {
+			return JSON.parse(localStorage.getItem("ereader_settings") || "{}").enableAIFeatures === true;
+		} catch (e) {
+			return false;
+		}
+	},
+
+	detectClaudeApp: function() {
+		if (window.PalmSystem && this.$.claudeListApps) {
+			try { this.$.claudeListApps.call({}); } catch (e) { this.log("BookReader: claude listApps error: " + e); }
+		}
+	},
+
+	handleClaudeListApps: function(inSender, inResponse) {
+		var found = false;
+		if (inResponse && inResponse.apps) {
+			for (var i = 0; i < inResponse.apps.length; i++) {
+				if (inResponse.apps[i].id === this.CLAUDE_APP_ID) { found = true; break; }
+			}
+		}
+		this.claudeInstalled = found;
+		this.log("BookReader: Claude Chat installed: " + found);
+		this.updateClaudeMenuAvailability();
+	},
+
+	updateClaudeMenuAvailability: function() {
+		var available;
+		if (window.PalmSystem) {
+			// webOS: hand off to the locally-installed Claude Chat app.
+			available = !!(this.claudeInstalled && this.isAIFeaturesEnabled());
+		} else {
+			// PWA / browser: no local app to launch, but the open web is
+			// available, so we open claude.ai instead. Setting-on is enough.
+			available = this.isAIFeaturesEnabled();
+		}
+		if (this.$.bottom_row && this.$.bottom_row.setClaudeAvailability) {
+			this.$.bottom_row.setClaudeAvailability(available);
+		}
+	},
+
+	// Book-menu "Discuss in Claude..." — gather the previous/current/next page
+	// text plus title/author and hand it to the Claude Chat app as context.
+	handleDiscussInClaude: function() {
+		var self = this;
+		var title  = (this.bookData && this.bookData.title)  ? this.bookData.title  : "";
+		var author = (this.bookData && this.bookData.author) ? this.bookData.author : "";
+
+		this.$.body.getAdjacentPagesText(function(pages) {
+			var context = "";
+			if (pages.prev)    { context += "[Previous page]\n" + pages.prev + "\n\n"; }
+			context += "[Current page]\n" + (pages.current || "") + "\n\n";
+			if (pages.next)    { context += "[Next page]\n" + pages.next; }
+			context = context.replace(/[ \t]+\n/g, "\n").trim();
+
+			if (context.length > self.CLAUDE_CONTEXT_MAX) {
+				context = context.slice(0, self.CLAUDE_CONTEXT_MAX) + "\n…";
+			}
+			self.launchClaudeChat(title, author, context);
+		});
+	},
+
+	// Platform dispatch: webOS hands off to the local Claude Chat app; PWA /
+	// browser opens the public claude.ai site with the passage prefilled.
+	launchClaudeChat: function(title, author, context) {
+		if (window.PalmSystem) {
+			this.launchClaudeApp(title, author, context);
+		} else {
+			this.openClaudeWeb(title, author, context);
+		}
+	},
+
+	launchClaudeApp: function(title, author, context) {
+		if (!this.$.claudeService) { return; }
+		try {
+			// Values are URI-encoded so the receiver's decodeURIComponent round-
+			// trips them (matches the JustType query convention in Claude Chat).
+			this.$.claudeService.call({
+				id: this.CLAUDE_APP_ID,
+				params: {
+					mode:    "bookchat",
+					query:   "",
+					title:   encodeURIComponent(title || ""),
+					author:  encodeURIComponent(author || ""),
+					context: encodeURIComponent(context || "")
+				}
+			});
+		} catch (e) {
+			this.log("BookReader: Claude launch error: " + e);
+			enyo.windows.addBannerMessage($L("Couldn't open Claude Chat"), "{}", "icon.png");
+		}
+	},
+
+	// claude.ai accepts a prefilled prompt via ?q=. There is no separate hidden-
+	// context channel on the web, so we fold the framing + passage into one
+	// prompt. The passage is trimmed so the FINAL encoded URL stays under a
+	// conservative length — encodeURIComponent inflates text unpredictably
+	// (spaces/newlines become %XX), so a raw-character cap wouldn't bound the URL
+	// that the server actually sees. An over-long URL risks a 414.
+	CLAUDE_WEB_URL_MAX: 2000,   // conservative; safe across virtually all servers/proxies
+
+	openClaudeWeb: function(title, author, context) {
+		var base = "https://claude.ai/new?q=";
+		var book = title ? ('"' + title + '"' + (author ? " by " + author : "")) : "the book I'm reading";
+		var prefix = "I'm reading " + book + ". Here's the passage I'm currently on:\n\n";
+		var suffix = "\n\nI'd like to discuss it with you.";
+		var self = this;
+
+		var buildUrl = function(ctx, trimmed) {
+			var prompt = prefix + ctx + (trimmed ? "\n…" : "") + suffix;
+			return base + encodeURIComponent(prompt);
+		};
+
+		var ctx = context || "";
+		var trimmed = false;
+		var url = buildUrl(ctx, trimmed);
+		// Shrink the passage (~12% per pass) until the whole encoded URL fits.
+		while (url.length > this.CLAUDE_WEB_URL_MAX && ctx.length > 0) {
+			ctx = ctx.slice(0, Math.floor(ctx.length * 0.88));
+			trimmed = true;
+			url = buildUrl(ctx, trimmed);
+		}
+		this.log("BookReader: Claude web URL length " + url.length + " (passage " + ctx.length + " chars)");
+
+		try {
+			window.open(url, "_blank");
+		} catch (e) {
+			this.log("BookReader: Claude web open error: " + e);
+			window.location.href = url;
 		}
 	}
 });

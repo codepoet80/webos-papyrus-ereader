@@ -16,7 +16,10 @@ enyo.kind({
 			{name: "loc", kind: "ereader.reading.BookInfoItem", actionName: $L("Location..."), onActionSelected: "handleActionSelection"},
 			{name: "markup", kind: "ereader.reading.BookInfoItem", actionName: $L("Bookmarks"), onActionSelected: "handleActionSelection"},
 			{name: "define", kind: "ereader.reading.BookInfoItem", actionName: $L("Define..."), onActionSelected: "handleActionSelection"},
-			{name: "share", kind: "ereader.reading.BookInfoItem", actionName: $L("Share Page"), onActionSelected: "handleActionSelection"}
+			{name: "share", kind: "ereader.reading.BookInfoItem", actionName: $L("Share Page"), onActionSelected: "handleActionSelection"},
+			// Hidden by default; shown only when the "Discuss with Claude" setting
+			// is on AND the Claude Chat app is installed (BookReader gates this).
+			{name: "claude", kind: "ereader.reading.BookInfoItem", actionName: $L("Discuss in Claude..."), onActionSelected: "handleActionSelection", showing: false}
 		]},
 		{className: "balloon-bottom"}
 	],
@@ -42,6 +45,12 @@ enyo.kind({
 	// whether Define mode is currently active.
 	setDefineChecked: function (checked) {
 		this.$.define.setChecked(checked);
+	},
+
+	// Show/hide the "Discuss in Claude..." item.  Called by BookReader with the
+	// combined gate (setting enabled AND Claude Chat installed AND on webOS).
+	setClaudeAvailability: function (available) {
+		this.$.claude.setShowing(available);
 	}
 });
 

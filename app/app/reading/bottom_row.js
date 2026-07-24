@@ -15,7 +15,8 @@ enyo.kind({
 		onTOCSelected: "",
 		onPreviousLocationSelected: "",
 		onSharePage: "",
-		onDefineModeToggle: ""
+		onDefineModeToggle: "",
+		onDiscussInClaude: ""
 	},
 	components: [
 		{nodeTag: "hr", className:"hr-bottom"},
@@ -88,6 +89,9 @@ enyo.kind({
 			case "share":
 				this.doSharePage();
 				break;
+			case "claude":
+				this.doDiscussInClaude();
+				break;
 			default:
 				break;
 		}
@@ -129,6 +133,10 @@ enyo.kind({
 
 	setDefineChecked: function(checked) {
 		this.$.bookMenu.setDefineChecked(checked);
+	},
+
+	setClaudeAvailability: function(available) {
+		this.$.bookMenu.setClaudeAvailability(available);
 	},
 
 	handlePreviousLocationSelected: function(inSender) {

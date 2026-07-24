@@ -621,6 +621,10 @@ enyo.kind({
 		return this.$.epubRenderer.getPageText();
 	},
 
+	getAdjacentPagesText: function(callback) {
+		return this.$.epubRenderer.getAdjacentPagesText(callback);
+	},
+
 	getWordAt: function(clientX, clientY) {
 		return this.$.epubRenderer.getWordAt(clientX, clientY);
 	},

@@ -349,6 +349,67 @@ enyo.kind({
 	},
 
 	/**
+	 * Gather the plain text of the previous, current, and next pages without
+	 * disturbing the reader's position or triggering a visible page turn.
+	 *
+	 * The current page comes from the live container; the adjacent pages are
+	 * computed on preloaderFitter (the separate background PageFitter, so the
+	 * user's pageFitter is never touched) and rendered into the hidden
+	 * preloadOffscreen node purely to extract text.  Async because the fitter's
+	 * binary search is callback-based.
+	 *
+	 * callback receives {prev, current, next} (strings; "" at book boundaries).
+	 */
+	getAdjacentPagesText: function(callback) {
+		var self = this;
+		var current = this.getPageText();
+
+		if (!this.bookReady || !this.pageFitter || !this.preloaderFitter) {
+			callback({prev: "", current: current, next: ""});
+			return;
+		}
+
+		// Take ownership of preloaderFitter: cancel any in-flight preload so it
+		// can't race us or overwrite our reads.  A later page turn reschedules it.
+		this.preloadToken++;
+		this.preloadActive = false;
+
+		var size = this.getScreenHeight();
+		var startPos = this.pageFitter.currStart;
+		var endPos   = this.pageFitter.currEnd;
+		var node     = this.$.preloadOffscreen.hasNode();
+
+		var htmlToText = function(html) {
+			if (!html) return "";
+			if (node) {
+				node.innerHTML = html;
+				return node.innerText || node.textContent || "";
+			}
+			// Fallback: detached element (textContent works even without layout).
+			var tmp = document.createElement("div");
+			tmp.innerHTML = html;
+			return tmp.textContent || "";
+		};
+
+		var syncToCurrent = function() {
+			self.preloaderFitter.currStart = startPos;
+			self.preloaderFitter.currEnd   = endPos;
+			self.preloaderFitter.sanitizePosition = false;
+		};
+
+		syncToCurrent();
+		this.preloaderFitter.getNextPage(size, function(nextHtml) {
+			var nextText = htmlToText(nextHtml);
+			syncToCurrent();
+			self.preloaderFitter.getPrevPage(size, function(prevHtml) {
+				var prevText = htmlToText(prevHtml);
+				if (node) node.innerHTML = "";   // don't leave stale content behind
+				callback({prev: prevText, current: current, next: nextText});
+			});
+		});
+	},
+
+	/**
 	 * Return the word under the given viewport (client) coordinates, or "".
 	 * Used by the dictionary look-up feature (Define mode).
 	 *

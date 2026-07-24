@@ -69,6 +69,14 @@ enyo.kind({
 					{kind: "RowGroup", style: "margin-top: 20px;", components: [
 						{kind: "Button", content: $L("Clear Library"), className: "enyo-button-negative", onclick: "confirmClearLibrary"},
 					]},
+					{content: $L("AI"), className: "loginFormTitle", style: "margin-top: 20px; font-size: 16px;"},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
+							{content: $L("Enable AI Features"), flex: 1},
+							{kind: "ToggleButton", name: "aiFeaturesBtn", state: false, onChange: "saveAIFeaturesChange"},
+						]},
+						{name: "aiDesc", content: "", className: "loginFormDescription"},
+					]},
 					{content: $L("Sync"), className: "loginFormTitle", style: "margin-top: 20px; font-size: 16px;"},
 					{kind: "RowGroup", components: [
 						{kind: "HFlexBox", components: [
@@ -112,6 +120,11 @@ enyo.kind({
 
 	create: function() {
 		this.inherited(arguments);
+		// Platform-specific hint under the AI toggle: webOS hands off to the
+		// installed Claude Chat app; PWA/desktop opens the claude.ai website.
+		this.$.aiDesc.setContent(window.PalmSystem
+			? $L("Some features require the separate Claude Chat app — find it in the App Catalog.")
+			: $L("Some features open the current page for discussion at claude.ai."));
 		this.loadSettings();
 	},
 
@@ -129,6 +142,7 @@ enyo.kind({
 			this.$.fontSizeSelector.setValue(settings.currentFontSize || 18);
 			this.$.volumeKeysBtn.setState(settings.volumeKeyPageTurn || false);
 			this.$.keepScreenOnBtn.setState(settings.keepScreenOnReading || false);
+			this.$.aiFeaturesBtn.setState(settings.enableAIFeatures || false);
 			this.$.syncEnabledBtn.setState(settings.syncEnabled || false);
 			this.$.syncUrlInput.setValue(settings.syncUrl || "");
 			this.$.syncUserInput.setValue(settings.syncUser || "");
@@ -171,6 +185,10 @@ enyo.kind({
 
 	saveKeepScreenOnChange: function() {
 		this.saveSettings("keepScreenOnReading", this.$.keepScreenOnBtn.getState());
+	},
+
+	saveAIFeaturesChange: function() {
+		this.saveSettings("enableAIFeatures", this.$.aiFeaturesBtn.getState());
 	},
 
 	saveAndClose: function() {
