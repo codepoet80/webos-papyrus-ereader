@@ -146,6 +146,14 @@ enyo.kind({
 
 		// Load saved settings
 		this.loadSettings();
+
+		// Account sync: fetch reader prefs saved from other devices and
+		// re-apply if anything changed (no-op in WebDAV mode or when
+		// sync is off; loadSettings reads localStorage fresh each call).
+		var self = this;
+		PapyrusSyncManager.pullSettings(function(changed) {
+			if (changed) { self.loadSettings(); }
+		});
 	},
 
 	/**

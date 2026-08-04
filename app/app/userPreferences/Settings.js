@@ -83,17 +83,24 @@ enyo.kind({
 							{content: $L("Sync reading position"), flex: 1},
 							{kind: "ToggleButton", name: "syncEnabledBtn", state: false, onChange: "saveSyncEnabled"},
 						]},
-						{content: $L("Syncs your furthest read position via WebDAV"), className: "loginFormDescription"},
+						{name: "syncDesc", content: $L("Syncs your furthest read position via WebDAV"), className: "loginFormDescription"},
+						{kind: "HFlexBox", style: "margin-top: 6px;", components: [
+							{content: $L("Sync using"), flex: 1},
+							{kind: "ListSelector", name: "syncModeSelector", onChange: "saveSyncMode", items: [
+								{caption: $L("webOS Account"), value: "account"},
+								{caption: $L("WebDAV server"), value: "webdav"}
+							]}
+						]},
 					]},
-					{kind: "RowGroup", components: [
+					{kind: "RowGroup", name: "syncUrlRow", components: [
 						{content: $L("WebDAV URL"), className: "loginFormDescription"},
 						{kind: "Input", name: "syncUrlInput", hint: "https://server/remote.php/webdav", onchange: "saveSyncUrl", autocorrect:false, spellCheck: false, autoCapitalize: "lowercase", autoComplete: false},
 					]},
-					{kind: "RowGroup", components: [
-						{content: $L("Username"), className: "loginFormDescription"},
+					{kind: "RowGroup", name: "syncUserRow", components: [
+						{name: "syncUserLabel", content: $L("Username"), className: "loginFormDescription"},
 						{kind: "Input", name: "syncUserInput", hint: "username", onchange: "saveSyncUser", autocorrect: false, spellCheck: false, autoCapitalize: "lowercase", autoComplete: false},
 					]},
-					{kind: "RowGroup", components: [
+					{kind: "RowGroup", name: "syncPassRow", components: [
 						{content: $L("Password"), className: "loginFormDescription"},
 						{kind: "PasswordInput", name: "syncPassInput", hint: "password", onchange: "saveSyncPass"},
 					]},
@@ -144,10 +151,12 @@ enyo.kind({
 			this.$.keepScreenOnBtn.setState(settings.keepScreenOnReading || false);
 			this.$.aiFeaturesBtn.setState(settings.enableAIFeatures || false);
 			this.$.syncEnabledBtn.setState(settings.syncEnabled || false);
+			this.$.syncModeSelector.setValue(settings.syncMode || "webdav");
 			this.$.syncUrlInput.setValue(settings.syncUrl || "");
 			this.$.syncUserInput.setValue(settings.syncUser || "");
 			this.$.syncPassInput.setValue(settings.syncPass || "");
 			this.$.syncStatus.setContent("");
+			this.updateSyncModeUI();
 		} catch (e) {
 			this.log("Error loading settings: " + e);
 		}
@@ -196,11 +205,37 @@ enyo.kind({
 		this.saveSettings("syncUrl",  this.$.syncUrlInput.getValue().trim());
 		this.saveSettings("syncUser", this.$.syncUserInput.getValue().trim());
 		this.saveSettings("syncPass", this.$.syncPassInput.getValue().trim());
+		// Account mode also syncs reader prefs — push the ones just saved.
+		PapyrusSyncManager.pushSettings();
 		this.close();
 	},
 
 	saveSyncEnabled: function() {
 		this.saveSettings("syncEnabled", this.$.syncEnabledBtn.getState());
+	},
+
+	saveSyncMode: function(inSender) {
+		this.saveSettings("syncMode", inSender.getValue());
+		this.$.syncStatus.setContent("");
+		this.updateSyncModeUI();
+	},
+
+	// Show only the fields the selected backend needs. Account mode on a webOS
+	// device reuses the device's webOS Account sign-in, so no fields at all;
+	// account mode in a browser needs the account email + password once.
+	updateSyncModeUI: function() {
+		var mode = this.$.syncModeSelector.getValue();
+		var onDevice = !!window.PalmSystem;
+		var webdav = (mode === "webdav");
+		this.$.syncUrlRow.setShowing(webdav);
+		this.$.syncUserRow.setShowing(webdav || !onDevice);
+		this.$.syncPassRow.setShowing(webdav || !onDevice);
+		this.$.syncUserLabel.setContent(webdav ? $L("Username") : $L("webOS Account email"));
+		this.$.syncDesc.setContent(webdav
+			? $L("Syncs your furthest read position via WebDAV")
+			: (onDevice
+				? $L("Syncs settings and positions via this device's webOS Account")
+				: $L("Syncs settings and positions via your webOS Account")));
 	},
 
 	saveSyncUrl: function() {
@@ -221,6 +256,12 @@ enyo.kind({
 		var pass = this.$.syncPassInput.getValue();
 		this.$.syncStatus.setContent("Testing...");
 		var self = this;
+		if (this.$.syncModeSelector.getValue() === "account") {
+			PapyrusSyncManager.testAccount(user.trim(), pass, function(ok, msg) {
+				self.$.syncStatus.setContent(ok ? msg : ("Failed: " + (msg || "unknown error")));
+			});
+			return;
+		}
 		PapyrusSyncManager.testConnection(url, user, pass, function(ok, err) {
 			self.$.syncStatus.setContent(ok ? "Connected!" : ("Failed: " + (err || "unknown error")));
 		});

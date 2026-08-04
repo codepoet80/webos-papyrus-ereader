@@ -62,6 +62,7 @@ enyo.depends(
 	"app/common/BookData.js",
 	"app/common/EpubRenderer.js",
 	"app/common/FileImporter.js",
+	"app/common/webos-app-storage.js",
 	"app/common/SyncManager.js",
 	"app/common/Dictionary.js",
 	"app/common/ExpandingSearchBox.js",

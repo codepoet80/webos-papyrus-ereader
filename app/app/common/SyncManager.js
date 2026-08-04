@@ -1,8 +1,15 @@
 /**
- * PapyrusSyncManager - Reading position sync via WebDAV
+ * PapyrusSyncManager - Reading position sync via WebDAV or webOS Account
  *
- * Stores per-book position files at {webdavUrl}/.papyrus/{syncKey}.json
- * Uses XHR with Basic auth for WebDAV sync.
+ * Two user-selectable backends behind one interface (settings.syncMode):
+ *   "webdav"  — per-book files at {webdavUrl}/.papyrus/{syncKey}.json,
+ *               XHR + Basic auth (the original backend).
+ *   "account" — the webOS Archive app-storage service via WebOSAppStorage
+ *               (common/webos-app-storage.js), key "book:{syncKey}". On a
+ *               device the webOS Account sign-in is reused (no password in
+ *               the app); in the PWA the user signs in once from Settings.
+ *
+ * Both store the same payload {title, author, position, timestamp, bookmarks}.
  * Push happens on book close; pull happens on book open.
  */
 var PapyrusSyncManager = {
@@ -68,12 +75,13 @@ var PapyrusSyncManager = {
             var s = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
             return {
                 syncEnabled: s.syncEnabled || false,
+                syncMode:    s.syncMode    || "webdav",
                 syncUrl:     s.syncUrl     || "",
                 syncUser:    s.syncUser    || "",
                 syncPass:    s.syncPass    || ""
             };
         } catch(e) {
-            return { syncEnabled: false, syncUrl: "", syncUser: "", syncPass: "" };
+            return { syncEnabled: false, syncMode: "webdav", syncUrl: "", syncUser: "", syncPass: "" };
         }
     },
 
@@ -146,8 +154,17 @@ var PapyrusSyncManager = {
     // identifier: the ePub's dc:identifier value (preferred sync key); pass null to use title+author.
     pushPosition: function(title, author, identifier, position, bookmarks, onDone) {
         var settings = this.getSettings();
-        if (!settings.syncEnabled || !settings.syncUrl) {
-            console.log("Sync: push skipped (disabled or no URL)");
+        if (!settings.syncEnabled) {
+            console.log("Sync: push skipped (disabled)");
+            if (onDone) onDone(false, 0);
+            return;
+        }
+        if (settings.syncMode === "account") {
+            this._accountPush(title, author, identifier, position, bookmarks, onDone);
+            return;
+        }
+        if (!settings.syncUrl) {
+            console.log("Sync: push skipped (no URL)");
             if (onDone) onDone(false, 0);
             return;
         }
@@ -227,8 +244,17 @@ var PapyrusSyncManager = {
     // with the legacy title+author key for backward compatibility with pre-identifier sync files.
     pullPosition: function(title, author, identifier, callback) {
         var settings = this.getSettings();
-        if (!settings.syncEnabled || !settings.syncUrl) {
-            console.log("Sync: pull skipped (disabled or no URL)");
+        if (!settings.syncEnabled) {
+            console.log("Sync: pull skipped (disabled)");
+            callback(null);
+            return;
+        }
+        if (settings.syncMode === "account") {
+            this._accountPull(title, author, identifier, callback);
+            return;
+        }
+        if (!settings.syncUrl) {
+            console.log("Sync: pull skipped (no URL)");
             callback(null);
             return;
         }
@@ -325,5 +351,186 @@ var PapyrusSyncManager = {
             xhr.send();
         };
         attempt(true);
+    },
+
+    // ======================================================================
+    // webOS Account backend (syncMode === "account")
+    // ======================================================================
+
+    // Reader prefs worth syncing across devices. Session state (currentBook,
+    // currentAppView), device-specific bits (AI handoff) and the sync
+    // credentials themselves are deliberately excluded.
+    SYNCED_SETTINGS: ["basicReadingMode", "settingAnimation", "currentTheme",
+                      "currentFontType", "currentFontSize", "currentContentView",
+                      "currentContentSort", "volumeKeyPageTurn", "keepScreenOnReading"],
+
+    _store: null,
+
+    _getStore: function() {
+        if (!this._store && typeof WebOSAppStorage !== "undefined") {
+            this._store = new WebOSAppStorage({ appId: "com.palm.codepoet.papyrus" });
+        }
+        return this._store;
+    },
+
+    // Make sure we hold an account token: already signed in, or (on device)
+    // adopt the webOS Account sign-in via the Luna bus. In the PWA the user
+    // must sign in from Settings first. callback(errMessage|null)
+    _ensureAccountAuth: function(callback) {
+        var store = this._getStore();
+        if (!store) { return callback("Account storage unavailable"); }
+        if (store.isSignedIn()) { return callback(null); }
+        if (window.PalmSystem) {
+            store.useDeviceAccount(function(err) {
+                callback(err ? "No webOS Account on this device (sign in from Device Info)" : null);
+            });
+            return;
+        }
+        callback("Sign in with your webOS Account in Settings");
+    },
+
+    _accountPush: function(title, author, identifier, position, bookmarks, onDone) {
+        var self = this;
+        var syncKey = this.makeSyncKey(title, author, identifier);
+        var payload = {
+            title: title,
+            author: author,
+            position: position,
+            timestamp: Date.now(),
+            bookmarks: bookmarks || []
+        };
+        console.log("Sync: account push starting for key=" + syncKey + " position=" + position);
+        this._ensureAccountAuth(function(authErr) {
+            if (authErr) {
+                console.log("Sync: account push skipped — " + authErr);
+                if (onDone) onDone(false, 401);
+                return;
+            }
+            self._getStore().set("book:" + syncKey, payload, function(err, res) {
+                if (err) {
+                    console.log("Sync: account push failed (" + err.code + " status=" + err.status + ")");
+                    if (onDone) onDone(false, err.status || 0);
+                } else {
+                    console.log("Sync: account push succeeded revision=" + res.revision);
+                    if (onDone) onDone(true, 200);
+                }
+            });
+        });
+    },
+
+    _accountPull: function(title, author, identifier, callback) {
+        var self = this;
+        var syncKey = this.makeSyncKey(title, author, identifier);
+        console.log("Sync: account pull starting for key=" + syncKey);
+        this._ensureAccountAuth(function(authErr) {
+            if (authErr) {
+                console.log("Sync: account pull skipped — " + authErr);
+                callback(null, 401);
+                return;
+            }
+            self._getStore().get("book:" + syncKey, function(err, rec) {
+                if (err) {
+                    // not_found is the normal "no sync data yet" case, like WebDAV 404
+                    console.log("Sync: account pull returning null (" + err.code + ")");
+                    callback(null, err.status || 0);
+                    return;
+                }
+                var data = rec.value;
+                console.log("Sync: account pull got position=" + (data && data.position) +
+                            " bookmarks=" + (data && data.bookmarks ? data.bookmarks.length : 0));
+                callback(data);
+            });
+        });
+    },
+
+    // Settings-panel "Test Connection" for account mode. In the PWA, signs in
+    // with the supplied credentials first if needed. callback(ok, message)
+    testAccount: function(login, pass, callback) {
+        var self = this;
+        var store = this._getStore();
+        if (!store) { return callback(false, "Account storage unavailable"); }
+
+        var check = function() {
+            store.usage(function(err, usage) {
+                if (err) { return callback(false, err.message || ("HTTP " + err.status)); }
+                var acct = store.getAccount();
+                var kb = Math.round((usage.account.bytes / 1024) * 10) / 10;
+                callback(true, (acct && acct.alias ? "Connected as " + acct.alias : "Connected") +
+                               " (" + kb + " KB used)");
+            });
+        };
+
+        if (store.isSignedIn()) { return check(); }
+        if (window.PalmSystem) {
+            store.useDeviceAccount(function(err) {
+                if (err) { return callback(false, "No webOS Account on this device"); }
+                check();
+            });
+            return;
+        }
+        if (!login || !pass) {
+            return callback(false, "Enter your webOS Account email and password");
+        }
+        store.signIn(login, pass, function(err) {
+            if (err) { return callback(false, err.message || "Sign-in failed"); }
+            check();
+        });
+    },
+
+    // Push the synced subset of reader prefs to the account (fire-and-forget).
+    pushSettings: function() {
+        var settings = this.getSettings();
+        if (!settings.syncEnabled || settings.syncMode !== "account") { return; }
+        var self = this;
+        this._ensureAccountAuth(function(authErr) {
+            if (authErr) { return; }
+            var prefs = {}, all, i, k;
+            try { all = JSON.parse(localStorage.getItem("ereader_settings") || "{}"); }
+            catch (e) { return; }
+            for (i = 0; i < self.SYNCED_SETTINGS.length; i++) {
+                k = self.SYNCED_SETTINGS[i];
+                if (all[k] !== undefined) { prefs[k] = all[k]; }
+            }
+            self._getStore().set("settings", { prefs: prefs, timestamp: Date.now() }, function(err, res) {
+                console.log(err ? "Sync: settings push failed (" + err.code + ")"
+                                : "Sync: settings push succeeded revision=" + res.revision);
+            });
+        });
+    },
+
+    // Pull synced reader prefs and merge them into localStorage.
+    // callback(changed) — true when any local value was updated.
+    pullSettings: function(callback) {
+        var settings = this.getSettings();
+        if (!settings.syncEnabled || settings.syncMode !== "account") {
+            if (callback) callback(false);
+            return;
+        }
+        var self = this;
+        this._ensureAccountAuth(function(authErr) {
+            if (authErr) { if (callback) callback(false); return; }
+            self._getStore().get("settings", function(err, rec) {
+                if (err || !rec.value || !rec.value.prefs) {
+                    if (callback) callback(false);
+                    return;
+                }
+                var prefs = rec.value.prefs, changed = false, all, i, k;
+                try { all = JSON.parse(localStorage.getItem("ereader_settings") || "{}"); }
+                catch (e) { all = {}; }
+                for (i = 0; i < self.SYNCED_SETTINGS.length; i++) {
+                    k = self.SYNCED_SETTINGS[i];
+                    if (prefs[k] !== undefined && JSON.stringify(prefs[k]) !== JSON.stringify(all[k])) {
+                        all[k] = prefs[k];
+                        changed = true;
+                    }
+                }
+                if (changed) {
+                    try { localStorage.setItem("ereader_settings", JSON.stringify(all)); }
+                    catch (e) { changed = false; }
+                }
+                console.log("Sync: settings pull " + (changed ? "applied remote prefs" : "no changes"));
+                if (callback) callback(changed);
+            });
+        });
     }
 };

@@ -399,8 +399,9 @@
 
     enyo.fetchAppInfo = function () {
         // Let Enyo's own implementation handle it if it worked (e.g. future Enyo versions)
-        var native = _origFetchAppInfo ? _origFetchAppInfo.call(enyo) : null;
-        if (native && native.id) return native;
+        // ("native" is a reserved word in webOS's old WebKit — don't use it as a name)
+        var nativeInfo = _origFetchAppInfo ? _origFetchAppInfo.call(enyo) : null;
+        if (nativeInfo && nativeInfo.id) return nativeInfo;
         if (_appInfo) return _appInfo;
         try {
             var xhr = new XMLHttpRequest();
