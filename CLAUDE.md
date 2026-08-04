@@ -152,7 +152,14 @@ Settings are stored in `localStorage` under key `ereader_settings`:
     currentContentView: "...",  // Grid or list view
     currentContentSort: "...",  // Sort order
     currentBook: {...},         // Last opened book
-    currentAppView: "library"   // Current view
+    currentAppView: "library",  // Current view
+    volumeKeyPageTurn: false,   // Volume keys turn pages (webOS)
+    keepScreenOnReading: false, // Prevent display sleep while reading
+    enableAIFeatures: false,    // AI handoff features
+    syncEnabled: false,         // Sync master switch
+    syncMode: "webdav",         // "webdav" | "account" (webOS Account cloud storage)
+    syncUrl: "",                // WebDAV mode only
+    syncUser: "", syncPass: ""  // WebDAV creds — or account email/password in the PWA
 }
 ```
 
@@ -219,7 +226,33 @@ Page text is extracted via `EpubRenderer.getPageText()` → `body.getPageText()`
 
 Guard pattern in each: `if (position > (current || 0)) { update }`.
 
-The Bookmarks panel shows this value as "Furthest read position". It is also the position the book resumes from when reopened and the value synced to WebDAV.
+The Bookmarks panel shows this value as "Furthest read position". It is also the position the book resumes from when reopened and the value synced to the configured sync backend.
+
+### Cloud Sync Backends (`SyncManager.js`)
+
+`settings.syncMode` selects one of two backends behind the same
+`pushPosition`/`pullPosition`/`getSettings` interface — callers never branch:
+
+- **`"webdav"`** (default): the original backend — per-book JSON files at
+  `{syncUrl}/.papyrus/{syncKey}.json` with Basic auth. See fix #18 for its
+  reliability quirks (423 Locked, status-0 retries, `Origin: null`).
+- **`"account"`**: the webOS Archive app-storage service via
+  `app/common/webos-app-storage.js` — a **vendored copy of
+  `webos-common/AppStorage/webos-app-storage.js`; update it from there, don't
+  edit it here.** Same payload, stored at key `book:{syncKey}` under app id
+  `com.palm.codepoet.papyrus`. On webOS the device's webOS Account sign-in is
+  adopted automatically over the Luna bus (`getAccountToken` — no password in
+  the app); in the PWA the user signs in once from Settings (email/password →
+  365-day token in localStorage). Values are scrambled client-side by the SDK
+  before upload.
+
+Account mode additionally syncs reader prefs (`SYNCED_SETTINGS` subset) at key
+`"settings"`: pushed on Settings-popup OK (`pushSettings`), pulled and applied
+at app startup (`Main.create` → `pullSettings`). Session state, AI toggles,
+and sync credentials are never synced.
+
+Server + protocol docs: `webos-catalog-service` CLAUDE.md (endpoints
+`storage.php`, `device.php`); SDK API reference: `webos-common/AppStorage/README.md`.
 
 ---
 
