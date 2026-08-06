@@ -368,7 +368,16 @@ var PapyrusSyncManager = {
 
     _getStore: function() {
         if (!this._store && typeof WebOSAppStorage !== "undefined") {
-            this._store = new WebOSAppStorage({ appId: "com.palm.codepoet.papyrus" });
+            // appName labels this browser in the account's device list as
+            // "PWA-Papyrus". Stated explicitly rather than left to the SDK's
+            // default (the last segment of appId, which happens to give the same
+            // string) so it is not mistaken for the app's full title, "Papyrus
+            // eReader". Only affects PWA sign-in; on device the entry is named by
+            // the device itself.
+            this._store = new WebOSAppStorage({
+                appId: "com.palm.codepoet.papyrus",
+                appName: "Papyrus"
+            });
         }
         return this._store;
     },
