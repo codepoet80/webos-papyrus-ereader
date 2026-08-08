@@ -85,6 +85,33 @@
         }
     };
 
+    // --- Orientation lock (portrait-only; installed/standalone PWA only) -----
+    //
+    // Manifest "orientation": "portrait-primary" only takes effect for an
+    // installed home-screen PWA on platforms that honor it (mainly Android
+    // Chrome). This is the imperative fallback for the same platforms, plus
+    // any browser that supports the Screen Orientation API but ignores the
+    // manifest hint. iOS Safari implements neither -- no further fallback
+    // for it here.
+
+    function _lockPortrait() {
+        var isStandalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) ||
+            window.navigator.standalone;
+        if (!isStandalone) return; // browser tab — lock() throws, manifest hint doesn't apply
+
+        if (screen.orientation && screen.orientation.lock) {
+            screen.orientation.lock('portrait-primary').catch(function (e) {
+                enyo.log('webos-compat: orientation lock unavailable: ' + e);
+            });
+        }
+    }
+
+    if (document.readyState === 'complete') {
+        _lockPortrait();
+    } else {
+        window.addEventListener('load', _lockPortrait);
+    }
+
     // --- Toast notification (replaces addBannerMessage) ----------------------
 
     enyo.windows.addBannerMessage = function (message, launchParams, icon) {
