@@ -506,21 +506,28 @@ var PapyrusSyncManager = {
             });
         };
 
-        if (store.isSignedIn()) { return check(false); }
         if (window.PalmSystem) {
+            if (store.isSignedIn()) { return check(false); }
             store.useDeviceAccount(function(err) {
                 if (err) { return callback(false, "No webOS Account on this device"); }
                 check(false);
             });
             return;
         }
-        if (!login || !pass) {
-            return callback(false, "Enter your webOS Account email and password");
+        // PWA: credentials typed into the form always take priority over a
+        // cached session. Otherwise, editing the login/password fields and
+        // hitting Test Connection would silently re-check the OLD cached
+        // token (still valid, just the wrong account) instead of actually
+        // authenticating as the newly entered account — the previous account
+        // would appear to "stick" no matter what was typed.
+        if (login && pass) {
+            return store.signIn(login, pass, function(err) {
+                if (err) { return callback(false, err.message || "Sign-in failed"); }
+                check(false);
+            });
         }
-        store.signIn(login, pass, function(err) {
-            if (err) { return callback(false, err.message || "Sign-in failed"); }
-            check();
-        });
+        if (store.isSignedIn()) { return check(false); }
+        callback(false, "Enter your webOS Account email and password");
     },
 
     // Push the synced subset of reader prefs to the account (fire-and-forget).
