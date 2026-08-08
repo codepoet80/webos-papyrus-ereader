@@ -711,6 +711,18 @@ Values are URI-encoded so the receiver's `decodeURIComponent` round-trips them (
   4. **Gating** — item hidden when "Enable AI Features" is off; on webOS also hidden when Claude Chat not installed; visible on PWA with the setting on.
   5. **History preview** shows the intro/cue line, and the cue persists after visiting History (Claude Chat side).
 
+### 30. Account Sync Stuck After Switching webOS Accounts on Device (`SyncManager.js`)
+
+**Problem:** Switching the device's signed-in webOS Account (sign out of account A, sign into account B) permanently broke `syncMode: "account"` sync with "Failed: Invalid or expired account token" — Sync Now, background push, and pull all failed, and there was no way to recover short of clearing app data.
+
+**Root cause:** `WebOSAppStorage.isSignedIn()` (`webos-app-storage.js`) only checks "is *some* token cached in `localStorage`" — it never re-verifies that token still matches the account currently signed into the device. `SyncManager._ensureAccountAuth()` used that as a short-circuit: once any token was cached, `useDeviceAccount()` (the Luna-bus call that adopts the device's *current* account) was never called again. Meanwhile `org.webosarchive.webosaccount`'s `SignOutCommandAssistant` calls `device.php?m=deauthenticate` on sign-out, which **revokes that token server-side**. So the cached token wasn't just stale — the server had actively killed it, and nothing in Papyrus ever noticed or recovered.
+
+**Fix:** `_ensureAccountAuth(callback, forceRefresh)` gained a `forceRefresh` param that bypasses the `isSignedIn()` cache and re-adopts the device's current account. All five account-mode entry points (`_accountPush`, `_accountPull`, `testAccount`, `pushSettings`, `pullSettings`) now detect `err.status === 401` from the storage call, call `_ensureAccountAuth(cb, true)` once, and retry the operation — self-healing after an account switch with no user action needed. Guarded by a single `isRetry` flag per call so a genuinely-dead account (no webOS Account signed in at all) still fails cleanly instead of looping.
+
+**Note:** A device already stuck in this state before the fix needs the fixed `SyncManager.js` delivered (reinstall, or a live novacom `put` for dev-loop testing) — the retry logic can't help until the code that contains it is actually running.
+
+---
+
 ## Implementation Status
 
 ### Completed

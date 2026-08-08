@@ -385,10 +385,18 @@ var PapyrusSyncManager = {
     // Make sure we hold an account token: already signed in, or (on device)
     // adopt the webOS Account sign-in via the Luna bus. In the PWA the user
     // must sign in from Settings first. callback(errMessage|null)
-    _ensureAccountAuth: function(callback) {
+    //
+    // forceRefresh bypasses the isSignedIn() cache and re-adopts the device's
+    // *current* account even when a token is already cached. Needed because
+    // isSignedIn() only checks "is some token cached" — it says nothing about
+    // whether that token still matches the account currently signed into the
+    // device. Signing out on-device revokes the old token server-side, so a
+    // stale cached token fails with 401 forever unless something forces a
+    // fresh useDeviceAccount() call. Callers do that from their 401 handler.
+    _ensureAccountAuth: function(callback, forceRefresh) {
         var store = this._getStore();
         if (!store) { return callback("Account storage unavailable"); }
-        if (store.isSignedIn()) { return callback(null); }
+        if (store.isSignedIn() && !forceRefresh) { return callback(null); }
         if (window.PalmSystem) {
             store.useDeviceAccount(function(err) {
                 callback(err ? "No webOS Account on this device (sign in from Device Info)" : null);
@@ -409,47 +417,65 @@ var PapyrusSyncManager = {
             bookmarks: bookmarks || []
         };
         console.log("Sync: account push starting for key=" + syncKey + " position=" + position);
-        this._ensureAccountAuth(function(authErr) {
-            if (authErr) {
-                console.log("Sync: account push skipped — " + authErr);
-                if (onDone) onDone(false, 401);
-                return;
-            }
-            self._getStore().set("book:" + syncKey, payload, function(err, res) {
-                if (err) {
-                    console.log("Sync: account push failed (" + err.code + " status=" + err.status + ")");
-                    if (onDone) onDone(false, err.status || 0);
-                } else {
-                    console.log("Sync: account push succeeded revision=" + res.revision);
-                    if (onDone) onDone(true, 200);
+        var attempt = function(isRetry) {
+            self._ensureAccountAuth(function(authErr) {
+                if (authErr) {
+                    console.log("Sync: account push skipped — " + authErr);
+                    if (onDone) onDone(false, 401);
+                    return;
                 }
-            });
-        });
+                self._getStore().set("book:" + syncKey, payload, function(err, res) {
+                    if (err) {
+                        // Stale token from a previously signed-in device account —
+                        // re-adopt the current one and retry once.
+                        if (err.status === 401 && !isRetry && window.PalmSystem) {
+                            console.log("Sync: account push got 401 — re-adopting device account and retrying");
+                            return attempt(true);
+                        }
+                        console.log("Sync: account push failed (" + err.code + " status=" + err.status + ")");
+                        if (onDone) onDone(false, err.status || 0);
+                    } else {
+                        console.log("Sync: account push succeeded revision=" + res.revision);
+                        if (onDone) onDone(true, 200);
+                    }
+                });
+            }, isRetry);
+        };
+        attempt(false);
     },
 
     _accountPull: function(title, author, identifier, callback) {
         var self = this;
         var syncKey = this.makeSyncKey(title, author, identifier);
         console.log("Sync: account pull starting for key=" + syncKey);
-        this._ensureAccountAuth(function(authErr) {
-            if (authErr) {
-                console.log("Sync: account pull skipped — " + authErr);
-                callback(null, 401);
-                return;
-            }
-            self._getStore().get("book:" + syncKey, function(err, rec) {
-                if (err) {
-                    // not_found is the normal "no sync data yet" case, like WebDAV 404
-                    console.log("Sync: account pull returning null (" + err.code + ")");
-                    callback(null, err.status || 0);
+        var attempt = function(isRetry) {
+            self._ensureAccountAuth(function(authErr) {
+                if (authErr) {
+                    console.log("Sync: account pull skipped — " + authErr);
+                    callback(null, 401);
                     return;
                 }
-                var data = rec.value;
-                console.log("Sync: account pull got position=" + (data && data.position) +
-                            " bookmarks=" + (data && data.bookmarks ? data.bookmarks.length : 0));
-                callback(data);
-            });
-        });
+                self._getStore().get("book:" + syncKey, function(err, rec) {
+                    if (err) {
+                        // Stale token from a previously signed-in device account —
+                        // re-adopt the current one and retry once.
+                        if (err.status === 401 && !isRetry && window.PalmSystem) {
+                            console.log("Sync: account pull got 401 — re-adopting device account and retrying");
+                            return attempt(true);
+                        }
+                        // not_found is the normal "no sync data yet" case, like WebDAV 404
+                        console.log("Sync: account pull returning null (" + err.code + ")");
+                        callback(null, err.status || 0);
+                        return;
+                    }
+                    var data = rec.value;
+                    console.log("Sync: account pull got position=" + (data && data.position) +
+                                " bookmarks=" + (data && data.bookmarks ? data.bookmarks.length : 0));
+                    callback(data);
+                });
+            }, isRetry);
+        };
+        attempt(false);
     },
 
     // Settings-panel "Test Connection" for account mode. In the PWA, signs in
@@ -459,9 +485,20 @@ var PapyrusSyncManager = {
         var store = this._getStore();
         if (!store) { return callback(false, "Account storage unavailable"); }
 
-        var check = function() {
+        var check = function(isRetry) {
             store.usage(function(err, usage) {
-                if (err) { return callback(false, err.message || ("HTTP " + err.status)); }
+                if (err) {
+                    // Stale token from a previously signed-in device account —
+                    // re-adopt the current one and retry once.
+                    if (err.status === 401 && !isRetry && window.PalmSystem) {
+                        console.log("Sync: test connection got 401 — re-adopting device account and retrying");
+                        return store.useDeviceAccount(function(reauthErr) {
+                            if (reauthErr) { return callback(false, "No webOS Account on this device"); }
+                            check(true);
+                        });
+                    }
+                    return callback(false, err.message || ("HTTP " + err.status));
+                }
                 var acct = store.getAccount();
                 var kb = Math.round((usage.account.bytes / 1024) * 10) / 10;
                 callback(true, (acct && acct.alias ? "Connected as " + acct.alias : "Connected") +
@@ -469,11 +506,11 @@ var PapyrusSyncManager = {
             });
         };
 
-        if (store.isSignedIn()) { return check(); }
+        if (store.isSignedIn()) { return check(false); }
         if (window.PalmSystem) {
             store.useDeviceAccount(function(err) {
                 if (err) { return callback(false, "No webOS Account on this device"); }
-                check();
+                check(false);
             });
             return;
         }
@@ -491,20 +528,27 @@ var PapyrusSyncManager = {
         var settings = this.getSettings();
         if (!settings.syncEnabled || settings.syncMode !== "account") { return; }
         var self = this;
-        this._ensureAccountAuth(function(authErr) {
-            if (authErr) { return; }
-            var prefs = {}, all, i, k;
-            try { all = JSON.parse(localStorage.getItem("ereader_settings") || "{}"); }
-            catch (e) { return; }
-            for (i = 0; i < self.SYNCED_SETTINGS.length; i++) {
-                k = self.SYNCED_SETTINGS[i];
-                if (all[k] !== undefined) { prefs[k] = all[k]; }
-            }
-            self._getStore().set("settings", { prefs: prefs, timestamp: Date.now() }, function(err, res) {
-                console.log(err ? "Sync: settings push failed (" + err.code + ")"
-                                : "Sync: settings push succeeded revision=" + res.revision);
-            });
-        });
+        var attempt = function(isRetry) {
+            self._ensureAccountAuth(function(authErr) {
+                if (authErr) { return; }
+                var prefs = {}, all, i, k;
+                try { all = JSON.parse(localStorage.getItem("ereader_settings") || "{}"); }
+                catch (e) { return; }
+                for (i = 0; i < self.SYNCED_SETTINGS.length; i++) {
+                    k = self.SYNCED_SETTINGS[i];
+                    if (all[k] !== undefined) { prefs[k] = all[k]; }
+                }
+                self._getStore().set("settings", { prefs: prefs, timestamp: Date.now() }, function(err, res) {
+                    if (err && err.status === 401 && !isRetry && window.PalmSystem) {
+                        console.log("Sync: settings push got 401 — re-adopting device account and retrying");
+                        return attempt(true);
+                    }
+                    console.log(err ? "Sync: settings push failed (" + err.code + ")"
+                                    : "Sync: settings push succeeded revision=" + res.revision);
+                });
+            }, isRetry);
+        };
+        attempt(false);
     },
 
     // Pull synced reader prefs and merge them into localStorage.
@@ -516,30 +560,41 @@ var PapyrusSyncManager = {
             return;
         }
         var self = this;
-        this._ensureAccountAuth(function(authErr) {
-            if (authErr) { if (callback) callback(false); return; }
-            self._getStore().get("settings", function(err, rec) {
-                if (err || !rec.value || !rec.value.prefs) {
-                    if (callback) callback(false);
-                    return;
-                }
-                var prefs = rec.value.prefs, changed = false, all, i, k;
-                try { all = JSON.parse(localStorage.getItem("ereader_settings") || "{}"); }
-                catch (e) { all = {}; }
-                for (i = 0; i < self.SYNCED_SETTINGS.length; i++) {
-                    k = self.SYNCED_SETTINGS[i];
-                    if (prefs[k] !== undefined && JSON.stringify(prefs[k]) !== JSON.stringify(all[k])) {
-                        all[k] = prefs[k];
-                        changed = true;
+        var attempt = function(isRetry) {
+            self._ensureAccountAuth(function(authErr) {
+                if (authErr) { if (callback) callback(false); return; }
+                self._getStore().get("settings", function(err, rec) {
+                    if (err) {
+                        if (err.status === 401 && !isRetry && window.PalmSystem) {
+                            console.log("Sync: settings pull got 401 — re-adopting device account and retrying");
+                            return attempt(true);
+                        }
+                        if (callback) callback(false);
+                        return;
                     }
-                }
-                if (changed) {
-                    try { localStorage.setItem("ereader_settings", JSON.stringify(all)); }
-                    catch (e) { changed = false; }
-                }
-                console.log("Sync: settings pull " + (changed ? "applied remote prefs" : "no changes"));
-                if (callback) callback(changed);
-            });
-        });
+                    if (!rec.value || !rec.value.prefs) {
+                        if (callback) callback(false);
+                        return;
+                    }
+                    var prefs = rec.value.prefs, changed = false, all, i, k;
+                    try { all = JSON.parse(localStorage.getItem("ereader_settings") || "{}"); }
+                    catch (e) { all = {}; }
+                    for (i = 0; i < self.SYNCED_SETTINGS.length; i++) {
+                        k = self.SYNCED_SETTINGS[i];
+                        if (prefs[k] !== undefined && JSON.stringify(prefs[k]) !== JSON.stringify(all[k])) {
+                            all[k] = prefs[k];
+                            changed = true;
+                        }
+                    }
+                    if (changed) {
+                        try { localStorage.setItem("ereader_settings", JSON.stringify(all)); }
+                        catch (e) { changed = false; }
+                    }
+                    console.log("Sync: settings pull " + (changed ? "applied remote prefs" : "no changes"));
+                    if (callback) callback(changed);
+                });
+            }, isRetry);
+        };
+        attempt(false);
     }
 };
