@@ -723,6 +723,32 @@ Values are URI-encoded so the receiver's `decodeURIComponent` round-trips them (
 
 ---
 
+### 31. Theme/Font Changes Reverted on Next Launch — Never Pushed to Account Sync (`BookReader.js`, `ContentNavigator.js`)
+
+**Problem:** With `syncMode: "account"` enabled, changing theme or font size/type from the in-book controls (Font/Theme popups) worked fine for the rest of the session, but reverted to older values the next time the app was opened — on both webOS and the PWA.
+
+**Root cause:** `Main.create()` unconditionally calls `PapyrusSyncManager.pullSettings()` on every launch, which overwrites any `SYNCED_SETTINGS` key in `localStorage["ereader_settings"]` with whatever was last **pushed** to the account server. But `pushSettings()` was only ever called from `Settings.saveAndClose()` (the Settings popup's OK button). `BookReader.saveFontSetting()` (theme/font swatches while reading) and `ContentNavigator.updateContentView`/`updateContentSort` (grid/list toggle, sort order) wrote straight to `localStorage` and never pushed — so the server's copy silently went stale the moment a user changed theme/font from the reader instead of the Settings popup, and the next pull stomped the local value back.
+
+**Fix:** `BookReader.saveFontSetting()` and `ContentNavigator.updateContentView`/`updateContentSort` now call `PapyrusSyncManager.pushSettings()` after writing to `localStorage`, matching the pattern `Settings.saveAndClose()` already used. `pushSettings()` is already a no-op guarded by `syncEnabled && syncMode === "account"`, so this is safe to call unconditionally on every change, including WebDAV mode / sync-off (no network activity in that case).
+
+**Lesson:** any write site for a key in `SyncManager.SYNCED_SETTINGS` must call `pushSettings()` — the automatic startup `pullSettings()` will otherwise clobber it on next launch. If a new synced setting is added, check every write site, not just the Settings popup.
+
+---
+
+### 32. Account Sync Exposed Book Titles in Plaintext as the Storage Key (`SyncManager.js`)
+
+**Problem:** A user's downloaded account-storage export showed book progress *values* as unreadable scrambled blobs (as expected) but the storage *keys* as plain text, e.g. `"book:catcher_in_the_rye_jerome_david_salinger"` — the book title and author were fully readable on the shared server, which is more sensitive than the position/bookmark data the scrambling was protecting.
+
+**Root cause — SDK design vs. our usage:** `webos-app-storage.js`'s own header is explicit: *"Values are SCRAMBLED... Do NOT store secrets... in app storage."* It only ever scrambles the *value* — `set(key, value, ...)` sends `key` to `storage.php` as plain text in the request body, and in fact uses the plaintext key itself as the salt for the value's XXTEA encryption (`recordKey(appId, dataKey)`), so the SDK's whole design assumes keys are non-secret identifiers like `"settings"`, not user content. The leak was entirely in **our own** `SyncManager.makeSyncKey()`, which built a human-readable `title_author` slug (or an ISBN-derived key, equally identifying via lookup) and handed it straight to the SDK as the literal storage key.
+
+**Fix — reuse the SDK's existing value-scrambling primitives for the key too, nothing new invented:** `WebOSAppStorage.scramble`/`unscramble` are exported as static methods specifically so apps can use the raw primitive directly (`webos-app-storage.js` line ~568: *"Exposed for tests and for apps that want the raw primitives"*). `SyncManager._scrambledBookKey(syncKey)` calls `WebOSAppStorage.scramble(appId, _BOOK_KEY_SALT, syncKey)` with a fixed local-only salt (`"papyrus_book_key_v1"` — never transmitted, just needs to stay consistent) to turn the human-readable `syncKey` into the same `"v1:<base64>"` opaque format already used for values, prefixed with the harmless, non-identifying `"book:"` literal. Deterministic: the same title/author/identifier always scrambles to the same key, so pull needs no separate lookup step. `_accountPush`/`_accountPull` now use this scrambled key instead of `"book:" + syncKey`.
+
+**Migration (no orphaned data):** on a `not_found` for the new scrambled key, `_accountPull` checks once for a record under the old plaintext key; if found, it adopts that value, re-saves it under the new scrambled key, and removes the old plaintext key from the server — self-healing per book on its next sync, same pattern as fix #14's identifier→legacy-key fallback.
+
+**Scope:** Account-mode only. WebDAV mode keeps its readable `{syncKey}.json` filename — that backend is the user's own private server, so the filename isn't a third-party exposure the way the shared webOS Archive account-storage service is. The fixed `"settings"` key (reader prefs) was left untouched — it identifies a record type, not a user, so it isn't sensitive the way a book title is.
+
+---
+
 ## Implementation Status
 
 ### Completed

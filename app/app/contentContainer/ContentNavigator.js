@@ -70,6 +70,7 @@ enyo.kind({
 			settings.currentContentView = view;
 			localStorage.setItem("ereader_settings", JSON.stringify(settings));
 		} catch (e) {}
+		PapyrusSyncManager.pushSettings();
 	},
 
 	setContentSort: function(sort) {
@@ -90,6 +91,7 @@ enyo.kind({
 			settings.currentContentSort = sort;
 			localStorage.setItem("ereader_settings", JSON.stringify(settings));
 		} catch (e) {}
+		PapyrusSyncManager.pushSettings();
 	},
 
 	setCategory: function(categoryId) {

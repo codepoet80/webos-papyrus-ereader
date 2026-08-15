@@ -508,6 +508,10 @@ enyo.kind({
 			settings[key] = value;
 			localStorage.setItem("ereader_settings", JSON.stringify(settings));
 		} catch (e) {}
+		// Theme/font are in SYNCED_SETTINGS — without this push, the next
+		// app launch's automatic pullSettings() overwrites this change with
+		// whatever was last pushed from the Settings popup (see fix #31).
+		PapyrusSyncManager.pushSettings();
 	},
 
 	saveReadingPosition: function() {

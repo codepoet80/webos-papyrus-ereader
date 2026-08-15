@@ -366,6 +366,20 @@ var PapyrusSyncManager = {
 
     _store: null,
 
+    // Account-mode storage keys must not reveal the book's title/author (or
+    // ISBN) in plaintext on the shared server — the SDK only scrambles
+    // VALUES; keys are sent to storage.php as-is (see webos-app-storage.js
+    // header). Reuse the exact same WebOSAppStorage.scramble/unscramble
+    // primitives already used for values (exported as static methods for
+    // this purpose), with a fixed local-only salt so the result is
+    // deterministic: the same title/author/identifier always scrambles to
+    // the same key, letting pull recompute it without a server-side lookup.
+    _BOOK_KEY_SALT: "papyrus_book_key_v1",
+
+    _scrambledBookKey: function(syncKey) {
+        return "book:" + WebOSAppStorage.scramble("com.palm.codepoet.papyrus", this._BOOK_KEY_SALT, syncKey);
+    },
+
     _getStore: function() {
         if (!this._store && typeof WebOSAppStorage !== "undefined") {
             // appName labels this browser in the account's device list as
@@ -409,6 +423,7 @@ var PapyrusSyncManager = {
     _accountPush: function(title, author, identifier, position, bookmarks, onDone) {
         var self = this;
         var syncKey = this.makeSyncKey(title, author, identifier);
+        var storageKey = this._scrambledBookKey(syncKey);
         var payload = {
             title: title,
             author: author,
@@ -424,7 +439,7 @@ var PapyrusSyncManager = {
                     if (onDone) onDone(false, 401);
                     return;
                 }
-                self._getStore().set("book:" + syncKey, payload, function(err, res) {
+                self._getStore().set(storageKey, payload, function(err, res) {
                     if (err) {
                         // Stale token from a previously signed-in device account —
                         // re-adopt the current one and retry once.
@@ -447,6 +462,8 @@ var PapyrusSyncManager = {
     _accountPull: function(title, author, identifier, callback) {
         var self = this;
         var syncKey = this.makeSyncKey(title, author, identifier);
+        var storageKey = this._scrambledBookKey(syncKey);
+        var legacyKey = "book:" + syncKey; // pre-scrambling plaintext key — see fix #32
         console.log("Sync: account pull starting for key=" + syncKey);
         var attempt = function(isRetry) {
             self._ensureAccountAuth(function(authErr) {
@@ -455,7 +472,7 @@ var PapyrusSyncManager = {
                     callback(null, 401);
                     return;
                 }
-                self._getStore().get("book:" + syncKey, function(err, rec) {
+                self._getStore().get(storageKey, function(err, rec) {
                     if (err) {
                         // Stale token from a previously signed-in device account —
                         // re-adopt the current one and retry once.
@@ -463,7 +480,25 @@ var PapyrusSyncManager = {
                             console.log("Sync: account pull got 401 — re-adopting device account and retrying");
                             return attempt(true);
                         }
-                        // not_found is the normal "no sync data yet" case, like WebDAV 404
+                        if (err.code === "not_found") {
+                            // Record may still be sitting under the old plaintext
+                            // key from before keys were scrambled (fix #32). Check
+                            // once; if found, adopt it and migrate it to the
+                            // scrambled key so the server stops holding the title
+                            // in the clear.
+                            self._getStore().get(legacyKey, function(legacyErr, legacyRec) {
+                                if (legacyErr || !legacyRec) {
+                                    console.log("Sync: account pull returning null (not_found)");
+                                    callback(null, err.status || 0);
+                                    return;
+                                }
+                                console.log("Sync: migrating legacy plaintext book key to scrambled key");
+                                self._getStore().set(storageKey, legacyRec.value, function() {});
+                                self._getStore().remove(legacyKey, function() {});
+                                callback(legacyRec.value);
+                            });
+                            return;
+                        }
                         console.log("Sync: account pull returning null (" + err.code + ")");
                         callback(null, err.status || 0);
                         return;
