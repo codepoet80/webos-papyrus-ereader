@@ -377,7 +377,16 @@ var PapyrusSyncManager = {
     _BOOK_KEY_SALT: "papyrus_book_key_v1",
 
     _scrambledBookKey: function(syncKey) {
-        return "book:" + WebOSAppStorage.scramble("com.palm.codepoet.papyrus", this._BOOK_KEY_SALT, syncKey);
+        var scrambled = WebOSAppStorage.scramble("com.palm.codepoet.papyrus", this._BOOK_KEY_SALT, syncKey);
+        // scramble() emits standard base64 (+, /, = padding) for the VALUE
+        // format, but storage.php validates the key against a stricter
+        // charset and 400s on those characters ("invalid_key"). Swap to the
+        // URL-safe base64 alphabet and drop padding — same bytes, same
+        // scramble() call, just a safe text encoding for use as a key. The
+        // key is never unscrambled (always recomputed from title/author), so
+        // this one-way substitution needs no matching decode step.
+        var safeKey = scrambled.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+        return "book:" + safeKey;
     },
 
     _getStore: function() {

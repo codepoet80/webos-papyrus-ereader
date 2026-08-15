@@ -747,6 +747,8 @@ Values are URI-encoded so the receiver's `decodeURIComponent` round-trips them (
 
 **Scope:** Account-mode only. WebDAV mode keeps its readable `{syncKey}.json` filename — that backend is the user's own private server, so the filename isn't a third-party exposure the way the shared webOS Archive account-storage service is. The fixed `"settings"` key (reader prefs) was left untouched — it identifies a record type, not a user, so it isn't sensitive the way a book title is.
 
+**Follow-up — `invalid_key` (HTTP 400) on every push/pull after the fix landed:** `WebOSAppStorage.scramble()` emits standard base64 (`+`, `/`, `=` padding) — fine for a *value*, but `storage.php` validates the `key` field against a stricter charset and rejected it outright. `_scrambledBookKey` now runs the scrambled string through the standard base64→base64url substitution (`+`→`-`, `/`→`_`, strip `=` padding) before use. Still the exact same `scramble()` call and bytes — just a key-safe text encoding of the output, not a new scheme. No matching decode step is needed anywhere: the key is always recomputed from title/author/identifier, never unscrambled back to plaintext.
+
 ---
 
 ## Implementation Status
