@@ -359,9 +359,12 @@ var PapyrusSyncManager = {
 
     // Reader prefs worth syncing across devices. Session state (currentBook,
     // currentAppView), device-specific bits (AI handoff) and the sync
-    // credentials themselves are deliberately excluded.
+    // credentials themselves are deliberately excluded. currentFontSize is
+    // also excluded — it's a physical-size preference tuned to one device's
+    // screen/DPI, and looks wrong when carried over to a device with a
+    // different screen.
     SYNCED_SETTINGS: ["basicReadingMode", "settingAnimation", "currentTheme",
-                      "currentFontType", "currentFontSize", "currentContentView",
+                      "currentFontType", "currentContentView",
                       "currentContentSort", "volumeKeyPageTurn", "keepScreenOnReading"],
 
     _store: null,
