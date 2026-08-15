@@ -165,13 +165,20 @@
     top: 340px;
 }
 
-/* Bookmarks panel: "Furthest read position" row + its Reset button */
+/* Bookmarks panel: "Furthest read position" row + its Reset button.
+   The row's own border replaces the inner Item's — the Item only spans
+   part of the row's width now that the Reset button sits beside it, so
+   its default border would stop short instead of spanning the full row. */
 .markup-item-lastread {
 	align-items: center;
+	border-top: 1px solid rgba(255,255,255,0.5);
+	border-bottom: 1px solid rgba(0,0,0,0.2);
 }
 
 .markup-item-clickable {
 	cursor: pointer;
+	border-top: 0;
+	border-bottom: 0;
 }
 
 .markup-reset-btn {

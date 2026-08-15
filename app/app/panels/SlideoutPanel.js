@@ -256,6 +256,7 @@ enyo.kind({
 			this.$.markupsList.createComponent({
 				kind: "HFlexBox",
 				className: "markup-item markup-item-lastread",
+				align: "center",
 				components: [
 					{kind: "Item", flex: 1, className: "markup-item-clickable", onclick: "handleLastReadClick", owner: this, location: lastReadPos, components: [
 						{kind: "VFlexBox", components: [
