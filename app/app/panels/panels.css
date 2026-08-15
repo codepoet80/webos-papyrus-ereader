@@ -164,3 +164,17 @@
     left: 67px;
     top: 340px;
 }
+
+/* Bookmarks panel: "Furthest read position" row + its Reset button */
+.markup-item-lastread {
+	align-items: center;
+}
+
+.markup-item-clickable {
+	cursor: pointer;
+}
+
+.markup-reset-btn {
+	margin: 8px 12px;
+	white-space: nowrap;
+}

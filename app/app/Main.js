@@ -20,7 +20,7 @@ enyo.kind({
 		{kind: "Toaster", name: "toaster", scrim: true, flyInFrom: "right", style: "top:0px; bottom:0px; z-index:500;", lazy: false, onClose: "closeToaster", components: [
 			{className: "enyo-sliding-view-shadow"},
 			{kind: "VFlexBox", style: "width: 600px; max-width: 100vw;", flex: 1, height: "100%", components: [
-				{kind: "ereader.panels.SlideoutPanel", flex: 1, name: "slideoutContents", onSlidingDragBtnClicked: "handleSlideoutDismissal", onSearchResultSelected: "handleSearchResultSelected", onSearchQueried: "handleSearchQueried", onMarkupsResultSelected: "handleMarkupsResultSelected"},
+				{kind: "ereader.panels.SlideoutPanel", flex: 1, name: "slideoutContents", onSlidingDragBtnClicked: "handleSlideoutDismissal", onSearchResultSelected: "handleSearchResultSelected", onSearchQueried: "handleSearchQueried", onMarkupsResultSelected: "handleMarkupsResultSelected", onResetFurthestPosition: "handleResetFurthestPosition"},
 				{kind: "Toolbar", components: [
 					{kind: "GrabButton", onclick: "closeToaster"},
 					{kind: "Spacer"}
@@ -1079,6 +1079,29 @@ enyo.kind({
 		}
 	},
 
+	// User accidentally scanned/searched ahead and wants the "furthest read
+	// position" high-water mark pulled back to wherever they're actually
+	// reading right now. Deliberately bypasses the usual "only moves forward"
+	// guards (handleLocalPositionUpdated / saveReadingPosition) since this is
+	// an explicit correction, not an in-session advance.
+	handleResetFurthestPosition: function() {
+		if (!this.currentBook || !this.$.reader) return;
+		var position = this.$.reader.getCurrentPosition();
+		if (position === undefined || position === null) return;
+
+		this.currentBook.locationsCompleted = position;
+		this.currentBook.lastAccessed = Date.now();
+		this.updateBookInLibrary(this.currentBook);
+
+		// Refresh the panel so the row shows the corrected percentage immediately.
+		if (this.$.slideoutContents && this.$.slideoutContents.$.markupsView) {
+			this.$.slideoutContents.$.markupsView.rebuildList();
+		}
+
+		var book = this.currentBook;
+		PapyrusSyncManager.pushPosition(book.title, book.author, book.epubIdentifier || null, position, []);
+	},
+
 	// ========================================
 	// READER EVENTS
 	// ========================================
@@ -1225,7 +1248,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v169)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v172)");
 		this.$.aboutPopup.openAtCenter();
 	},
 

@@ -10,7 +10,8 @@ enyo.kind({
 		onSlidingDragBtnClicked: "",
 		onSearchResultSelected: "",
 		onMarkupsResultSelected: "",
-		onSearchQueried: ""
+		onSearchQueried: "",
+		onResetFurthestPosition: ""
 	},
 	className: "slideout-panel",
 	published: {
@@ -20,7 +21,7 @@ enyo.kind({
 		{kind: "Pane", name: "contentPane", width: 700, flex: 1, transitionKind: "enyo.transitions.Simple", components: [
 			{name: "coverView", kind: "ereader.panels.CoverView", className: "enyo-bg"},
 			{name: "tocView", kind: "ereader.panels.TocView", onTocItemSelected: "handleTocItemSelected", className: "enyo-bg"},
-			{name: "markupsView", kind: "ereader.panels.MarkupsView", onMarkupsResultSelected: "doMarkupsResultSelected", className: "enyo-bg"},
+			{name: "markupsView", kind: "ereader.panels.MarkupsView", onMarkupsResultSelected: "doMarkupsResultSelected", onResetFurthestPosition: "doResetFurthestPosition", className: "enyo-bg"},
 			{name: "searchView", kind: "ereader.panels.SearchView", onSearchResultSelected: "doSearchResultSelected", onSearchQueried: "doSearchQueried", className: "enyo-bg"}
 		]}
 	],
@@ -198,7 +199,8 @@ enyo.kind({
 	kind: enyo.VFlexBox,
 	className: "markups-view",
 	events: {
-		onMarkupsResultSelected: ""
+		onMarkupsResultSelected: "",
+		onResetFurthestPosition: ""
 	},
 	published: {
 		book: null
@@ -252,17 +254,17 @@ enyo.kind({
 		if (lastReadPos > 0) {
 			hasItems = true;
 			this.$.markupsList.createComponent({
-				kind: "Item",
-				className: "markup-item",
-				onclick: "handleLastReadClick",
-				owner: this,
-				location: lastReadPos,
-				components: [{
-					kind: "VFlexBox", components: [
-						{content: $L("Furthest read position"), className: "markup-text", style: "font-style: italic;"},
-						{content: this._pct(lastReadPos), className: "markup-location"}
-					]
-				}]
+				kind: "HFlexBox",
+				className: "markup-item markup-item-lastread",
+				components: [
+					{kind: "Item", flex: 1, className: "markup-item-clickable", onclick: "handleLastReadClick", owner: this, location: lastReadPos, components: [
+						{kind: "VFlexBox", components: [
+							{content: $L("Furthest read position"), className: "markup-text", style: "font-style: italic;"},
+							{content: this._pct(lastReadPos), className: "markup-location"}
+						]}
+					]},
+					{kind: "Button", content: $L("Reset"), className: "markup-reset-btn", owner: this, onclick: "handleResetFurthestClick"}
+				]
 			});
 		}
 
@@ -294,6 +296,13 @@ enyo.kind({
 
 	handleLastReadClick: function(inSender) {
 		this.doMarkupsResultSelected({location: inSender.location});
+	},
+
+	handleResetFurthestClick: function(inSender, inEvent) {
+		// Stop the click from also bubbling to the sibling jump-to Item.
+		if (inEvent && inEvent.stopPropagation) inEvent.stopPropagation();
+		this.doResetFurthestPosition();
+		return true;
 	},
 
 	handleBookmarkClick: function(inSender) {
