@@ -388,7 +388,7 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 				data.coverId = entry.id;
 			}
 			data.images.push(entry);
-		} else if (entry.type == "application/xhtml+xml") {
+		} else if (entry.type == "application/xhtml+xml" || entry.type == "text/html") {
 			//We check if there's a fixed position from the spine
 			var inserted = false;
 			for (var j = 0; j < spineOrder.length; j += 1) {
@@ -410,6 +410,11 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 	}
 	
 	//Checking if the entry makes sense and adding it to the structure
+	//Spine itemrefs sometimes reference an idref with no matching manifest
+	//item (e.g. a stale "cover" itemref) - that leaves an undefined hole at
+	//that position since chapters[] is indexed by spine position. Compact
+	//the array so downstream code never has to null-check a chapter entry.
+	data.chapters = data.chapters.filter(function(c) { return c != null; });
 	if (data.chapters.length > 0) {
 		this.structure.rfData.push(data);
 	}
