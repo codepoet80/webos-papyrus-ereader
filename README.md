@@ -7,7 +7,8 @@ Papyrus combines the polished Enyo UI of the Kindle Beta app with the pure-JavaS
 ## Features
 
 - Clean, intuitive reading interface
-- Import ePub files from your device (multi-select supported)
+- Import ePub files from your device (multi-select supported, with progress and cancel)
+- Each chapter starts on a new page (optional)
 - Adjustable font size and typeface (Georgia or Verdana)
 - Reading themes: White, Sepia, and Night mode
 - Automatic reading position saving and restoration

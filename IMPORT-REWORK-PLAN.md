@@ -657,6 +657,10 @@ Only after P3.1–P3.3: benchmark 3× with `chapterPageBreaks` ON vs OFF
 PageFitter.js — see git history around builds v193/v194 for the exact lines).
 If not, keep default-off and record the per-phase numbers in the audit doc.
 
+**Outcome: done, and it is back ON by default.** The cost was F16, not the
+chunking. Harness shows identical work with breaks on or off. Capture is now
+unconditional and the preference controls display only.
+
 ---
 
 ## Automated harness
@@ -697,7 +701,8 @@ Mad Libs 10 (1979)                breaks-ON   ok              176     145       
 Findings from this baseline:
 - **breaks-ON costs only ~5% more defers** (490→514 Star Trek; 2902→2941
   Cognition). F9's 10–20× device penalty is therefore NOT explained by work
-  volume — the mechanism remains unidentified and the toggle stays default-off.
+  volume. *This observation is what eventually led to F16* — the gap between
+  harness and device was the bug, not measurement noise.
 - **Cognition in the Wild ships 36 zero-byte images** (verified in the zip:
   `usize=0, csize=2`). 395 of its 442 image references resolve to nothing, and
   each one currently costs a defer + a linear `getImage` scan + a log line

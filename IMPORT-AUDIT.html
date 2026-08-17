@@ -241,9 +241,10 @@
 </div>
 
 <div class="finding">
-  <h3><span class="fid">F9</span> Chapter-boundary chunking: measured 10&ndash;20&times; on device, mechanism unproven <span class="chip major">major</span> <span class="chip note">mitigated: default off</span></h3>
-  <p class="where">HTMLBook.js:248&ndash;261 &middot; gated by <code>chapterPageBreaks</code></p>
-  <p>Static analysis says +27% read/write cycles; the device says 10&ndash;20&times;. The honest position: unexplained, possibly confounded by F1/F12 during every test that measured it (each slow run was itself creating the zombies that slowed the next). Keep it opt-in until the P0 instrumentation below can measure a clean run.</p>
+  <h3><span class="fid">F9</span> Chapter-boundary chunking looked 10&ndash;20&times; slower &mdash; it was F16 <span class="chip major">major</span> <span class="chip note">RESOLVED</span></h3>
+  <p class="where">HTMLBook.js &middot; gated by <code>chapterPageBreaks</code></p>
+  <p>Static analysis said +27% read/write cycles; the device said 10&ndash;20&times;. That gap was the clue, not the noise: the extra chunking simply pushed more work through the quadratic <code>concatArray</code> (F16). With F16 fixed the harness shows identical work either way (Star Trek 474 steps / 18 writes with breaks on <em>or</em> off), and the feature is <strong>on by default</strong> again.</p>
+  <p>One design bug shipped briefly along the way: the preference gated whether boundaries were <em>recorded at import</em> as well as whether they were <em>displayed</em>. Boundaries live in the book&rsquo;s stored metadata, so a book imported with the preference off had none and enabling it later did nothing until re-import. Recording is now unconditional; the preference controls display only.</p>
 </div>
 
 <div class="finding">
@@ -264,11 +265,11 @@
 </div>
 
 <div class="finding">
-  <h3><span class="fid">F13&ndash;F15</span> Small sharp edges <span class="chip minor">minor</span></h3>
+  <h3><span class="fid">F13&ndash;F15</span> Small sharp edges <span class="chip minor">minor</span> <span class="chip note">F13 + F15 FIXED</span></h3>
   <ul>
-    <li><strong>F13</strong> Skipped/null-data images are never negative-cached in <code>imgNameBuffer</code> &mdash; every occurrence re-scans, re-warns, and burns a defer (HTMLBook tagWorker).</li>
+    <li><strong>F13</strong> <em>Fixed.</em> Skipped/null-data images were never negative-cached in <code>imgNameBuffer</code>, so every occurrence re-scanned, re-warned and burned a defer. One book referenced 36 zero-byte images 395 times between them; caching the misses removed 395 defers from that import.</li>
     <li><strong>F14</strong> <code>File.refresh</code> polls every 100ms forever if the XHR never reaches readyState 4.</li>
-    <li><strong>F15</strong> Import spinner is non-modal and doesn&rsquo;t re-center on content change (your observation); progress path is already throttled (2s DOM / 5-pct log), which is the right shape &mdash; keep it that way, since UI-update frequency has measurably hurt imports before.</li>
+    <li><strong>F15</strong> <em>Fixed.</em> The import dialog is now modal with a working Cancel button and a fixed-width body so it does not drift as the progress text changes. Deliberately <code>scrim: false</code>: commit <code>6841194</code> found a scrim can delay WebSQL work on webOS 3, and blocking input does not require one. Progress throttling (2s DOM) was already right and was left alone.</li>
   </ul>
 </div>
 
@@ -307,7 +308,7 @@
 <ul>
   <li>Time-sliced trampoline: run chain steps synchronously up to ~50ms, then yield once &mdash; cuts the 400-defer tax ~10&times; while keeping the UI alive.</li>
   <li>Batch buffer writes through the existing <code>writeBatch()</code>.</li>
-  <li>Re-evaluate chapter-boundary chunking (F9) with clean instrumentation; keep default-off until proven.</li>
+  <li><em>Done.</em> Chapter-boundary chunking (F9) re-evaluated with clean instrumentation: the cost was F16, and the feature is back on by default.</li>
   <li>Fix F7 (carry only the partial-tag tail, don&rsquo;t re-parse the prefix) and F8 (stream giant tags instead of truncating) &mdash; correctness wins that also remove worst-case cliffs.</li>
 </ul>
 

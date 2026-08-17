@@ -18,7 +18,8 @@ The app is fully functional and ready for community testing.
 - Library grid/list view with book covers
 - Smart file import: auto-detects filemgr service for reliable file scanning
 - Multi-select file picker for batch ePub imports
-- Import progress indicator ("Importing 1 of 5...")
+- Import progress indicator ("Importing 1 of 5...") with an ETA and a working Cancel button
+- Chapter breaks: each chapter starts on a new page (Settings > Apply chapter breaks, on by default)
 - Loading spinner when opening books
 - Page turns (tap left/right edges of screen)
 - Optional volume button page turning (Settings > Volume buttons turn pages)
@@ -41,7 +42,7 @@ The app is fully functional and ready for community testing.
 ### Known Limitations
 - Highlights/annotations UI not fully implemented
 - Location slider not yet functional
-- Some ePubs with unusual structure may not parse correctly
+- Some ePubs with unusual structure may not parse correctly (non-conformant media-types, `opf:`-prefixed OPF and oversized inline tags are handled; see fixes #13, #33)
 - Very large images may cause layout issues in some books
 - **Phone/PWA layout at ~405px is broken** — see Section 11 below for what was tried and what was NOT resolved
 
@@ -59,7 +60,8 @@ The app is fully functional and ready for community testing.
 │   │   │   └── BookReader.js                # Touch handling, volume keys, loading spinner
 │   │   ├── common/
 │   │   │   ├── EpubRenderer.js              # ★ Core rendering engine
-│   │   │   └── FileImporter.js              # ePub import handling
+│   │   │   ├── FileImporter.js              # ePub import handling
+│   │   │   └── ImportSession.js             # Import cancellation + step trampoline
 │   │   ├── contentContainer/                # Library views
 │   │   ├── libraryNavigator/                # Sidebar navigation
 │   │   └── panels/                          # Slideout panels (TOC, search)
@@ -70,6 +72,9 @@ The app is fully functional and ready for community testing.
 │   │   ├── MojoCompat.js                    # Mojo API compatibility shim
 │   │   └── ...
 │   └── appinfo.json
+├── tools/                                   # Import regression suite (run-tests.sh)
+├── IMPORT-AUDIT.html                        # Import pipeline findings F1-F16
+├── IMPORT-REWORK-PLAN.md                    # Phased implementation spec + status
 ├── com.palm.app.kindle_0.12.50_all/         # Original Kindle (reference)
 ├── com.mhwsoft.preader_0.8.21_all/          # Original Preader (reference)
 ├── README.md                                # Public documentation
@@ -90,6 +95,16 @@ palm-install com.palm.codepoet.papyrus_*.ipk && palm-launch com.palm.codepoet.pa
 
 # View device logs (for debugging)
 palm-log -f com.palm.codepoet.papyrus
+
+# Watch just the one-line import summary (see fix #33)
+palm-log -f com.palm.codepoet.papyrus | grep -E "IMPORTSTATS|PREFLIGHT"
+
+# webOS caches app code - a Luna restart is REQUIRED after install or you may
+# be testing stale bits. Confirm the About dialog shows the new build number.
+printf 'initctl restart LunaSysMgr\nexit\n' | novacom open tty://
+
+# Import regression suite - run after ANY change to the import path
+./tools/run-tests.sh
 
 # Manual package (skips build number bump)
 palm-package app
@@ -262,7 +277,10 @@ Server + protocol docs: `webos-catalog-service` CLAUDE.md (endpoints
 |------|---------|
 | `app/Main.js` | App controller, library management, settings, About dialog |
 | `app/common/EpubRenderer.js` | Core rendering - wraps PageFitter with Enyo events |
-| `app/common/FileImporter.js` | ePub import, parsing, library persistence |
+| `app/common/FileImporter.js` | ePub import, parsing, library persistence, pre-flight, DB hygiene, IMPORTSTATS |
+| `app/common/ImportSession.js` | Import single-flight lock, cancellation token, step trampoline |
+| `src/io/Bytes.js` | Byte primitives. `concatArray` is the engine hot path — append ascending only (fix #33) |
+| `tools/run-tests.sh` | Import regression suite — run after any import-path change |
 | `app/reading/body.js` | Book view container, coordinates with EpubRenderer |
 | `app/reading/BookReader.js` | Touch handling, toolbar, loading spinner |
 | `app/reading/BookReader.css` | Reader styling, dogear positioning, z-index layering |
@@ -500,6 +518,8 @@ var errMsg = pushStatus === 0   ? "Could not reach sync server." :
 ### 19. Import Pipeline — Performance Sensitivity and Protected Invariants
 
 **Do not change `EpubReader.js` or `HTMLBook.js` without a before/after import timing test on a real webOS TouchPad.**
+
+> **Update (fix #33):** the headline slowdown this section was written around turned out to be a quadratic `concatArray`, now fixed, and there is an automated suite (`./tools/run-tests.sh`) that catches correctness and work-volume regressions in seconds. The device-timing rule below still stands — the suite runs under Node and cannot measure webOS wall-clock.
 
 The import pipeline is fragile in ways that are not obvious from static code analysis:
 
@@ -751,6 +771,47 @@ Values are URI-encoded so the receiver's `decodeURIComponent` round-trips them (
 
 ---
 
+### 33. Import Pipeline Rework — `concatArray` Was Quadratic (v1.6.0)
+
+**Problem:** The same book imported in ~90 seconds on one run and 10–25 minutes on the next. It looked nondeterministic, which sent several sessions chasing the wrong things (chapter-break chunking, DB8 vs WebSQL, image handling). It was not random: cost was a function of book size in a way nobody had measured.
+
+**Root cause — `concatArray` in `src/io/Bytes.js`.** The engine's most-used primitive (chapter output, plain-byte buffers, inflate output, tag buffers all accumulate through it) appended by filling **backwards**: it wrote `arrayTo[newLength-1]` first and worked down. That leading write lands far past the array's end, punching a block of holes, which makes the JS engine abandon the packed-array representation for a sparse/dictionary one — permanently, on an array that only ever grows.
+
+| accumulated in 4KB pieces | backwards (old) | forwards (new) |
+|---|---|---|
+| 82 KB | 108 ms | 3 ms |
+| 328 KB | 2,344 ms | 6 ms |
+| 1.3 MB | **58,512 ms** | 31 ms (~1900×) |
+
+Because the penalty scales with bytes *already* accumulated, short books were fine and long ones appeared to hang. **Never write to an array index beyond `length` before filling the gap — always append ascending.**
+
+**Also fixed in the same pass:**
+- **Imports are cancellable.** `app/common/ImportSession.js` (new) is a single-flight token; every deferred step in EpubReader/HTMLBook/Inflate is scheduled through `ImportSession.deferStep`. Previously *nothing* could stop a running import — the watchdog "abandoned" it by ignoring its callback while the chain kept parsing and writing for minutes, competing with whatever the user did next. Stacked zombie chains were the second-largest source of the apparent randomness.
+- **Errors surface.** A step that threw used to vanish inside `setTimeout`, leaving the spinner forever. It now routes through `session.fail()` to a real error.
+- **Silent truncation (data loss).** `HTMLBook.readFromReader` treated "nothing parsed in this chunk" as end-of-book, discarding the rest while reporting success — reproduced losing 5,078 bytes on a book with a large inline `data:` URI. It now steps over the oversized tag and continues.
+- **Orphaned databases.** `dbName` embeds `Date.now()`, so re-importing stranded a full copy of the book's content (a device check found 30 databases / 107 MB, three copies of one book). Re-imports now purge the old DB; a registry (`ereader_dbs`) plus a delayed startup sweep reclaims future orphans. Pre-1.6.0 orphans predate the registry and are not reachable from JS — they need a manual cleanup.
+- Import lock (no concurrent imports), multi-book queue no longer stalls on a timeout, cancelled imports no longer add themselves to the library later, and missing/broken images are negative-cached (one book referenced 36 zero-byte images 395 times, each costing a defer + a linear scan).
+- **Performance:** a time-sliced trampoline replaces the ~10ms-per-step `defer()` floor, and buffer writes batch into one transaction per group. Combined with the `concatArray` fix, the portable work proxies dropped sharply — Star Trek 490→27 timers, Cognition in the Wild 2507→62.
+- **UI:** the import dialog is modal (no scrim — see below) with a working Cancel button; a pre-flight sizes the book and shows an honest ETA.
+
+**`scrim: false` is deliberate on the import dialog.** Commit `6841194` found that a modal/scrim popup can delay WebSQL work on webOS 3 until it closes. Blocking input does not require the scrim, so the dialog takes `modal: true, scrim: false`.
+
+**Chapter breaks (fix #9-adjacent) are ON by default again.** Their apparent 10–20× import cost was this bug all along. Two rules now:
+1. Boundaries are recorded at import **unconditionally**; the preference controls **display only** (`PageFitter.chapterBreaksEnabled`). Gating capture on the preference was a design bug — boundaries live in the book's stored metadata, so a book imported with the preference off had none, and enabling it later did nothing until re-import.
+2. Books imported before build v204 have no stored boundaries and need one re-import.
+
+**Instrumentation:** every import now logs one warn-level line, which is the whole diagnostic:
+```
+IMPORTSTATS status=ok file=Book.epub total=88.4s load=1.2s parse=31.0s cover=4.1s store=52.1s chunks=30 dbWrites=17
+```
+A `PREFLIGHT` line precedes it with chapter/text/image counts.
+
+**Tests — run `./tools/run-tests.sh` after ANY import-path change.** See `tools/README.md`. It runs the real engine sources over a book directory (checking for silent truncation and re-opening each book from storage), a generated set of pathological books, and 16 cancellation/error assertions. It installs `jsdom` into `tools/node_modules` on first run (gitignored — this repo keeps `package.json`/`node_modules` out of git).
+
+**It still cannot measure webOS speed** (fix #19's warning stands): old JavaScriptCore has very different per-operation costs from V8. Use the `timers` and `writes` columns as the portable proxies, then confirm wall-clock on device with the `IMPORTSTATS` line. Full analysis in `IMPORT-AUDIT.html`; phased implementation spec and status in `IMPORT-REWORK-PLAN.md`.
+
+---
+
 ## Implementation Status
 
 ### Completed
@@ -786,6 +847,9 @@ Values are URI-encoded so the receiver's `decodeURIComponent` round-trips them (
 - [x] Oversized image skip: ePubs with large covers (>1MB) now import in normal time on webOS
 - [x] Enyo package size: removed unused g11n locale data (phone/address/name) and test images (~2.6MB savings)
 - [x] Dictionary look-up (Define mode): tap a word to define it (geometric hit-test, tapped-word highlight, webOS font caveats handled)
+- [x] Import pipeline rework (v1.6.0): quadratic `concatArray` fixed, imports cancellable, errors surfaced, silent truncation fixed, orphaned DBs reclaimed, ~18-40x fewer scheduler round-trips
+- [x] Import regression suite (`tools/run-tests.sh`) — real books, generated pathological books, cancellation/error assertions
+- [x] Chapter breaks: start each chapter on a new page (on by default; boundaries always recorded at import, preference controls display)
 - [x] Discuss in Claude (optional, off by default): hands prev/current/next page + title/author to the Claude Chat app as hidden context via `applicationManager/launch` on webOS, or opens claude.ai with a prefilled prompt on PWA/desktop; gated by the Enable AI Features setting
 
 ### Not Yet Implemented
