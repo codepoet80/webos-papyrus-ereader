@@ -218,19 +218,17 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 		//Built up incrementally below as import naturally crosses each
 		//chapter's raw-byte end.
 		this.chapterBreaks = [0];
-		//Gated by the "Apply chapter breaks" preference, default OFF.
-		//Confirmed via repeated on-device A/B testing: with this enabled, a
-		//~470KB novel's import goes from ~90s to 10-20+ minutes on a
-		//TouchPad. The exact mechanism was never pinned down - it is NOT
-		//simply "more read/write cycles" (a Node.js harness against the
-		//same book showed only ~1.3x more of those, nowhere near enough to
-		//explain the real-device gap) - so don't re-enable this by default
-		//without a confirmed root cause and a real on-device timing re-test.
-		this.chapterBreaksImportEnabled = false;
-		try {
-			var _importSettings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
-			this.chapterBreaksImportEnabled = _importSettings.chapterPageBreaks === true;
-		} catch (e) {}
+		//Chapter boundaries are ALWAYS recorded, regardless of the "Apply
+		//chapter breaks" preference. That preference controls DISPLAY only
+		//(PageFitter.chapterBreaksEnabled, set from EpubRenderer).
+		//
+		//Gating capture here as well was a design mistake: boundaries live in
+		//the book's stored metadata, so a book imported while the preference
+		//was off had NO boundary data, and turning the preference on later did
+		//nothing until the book was re-imported. Recording them always costs
+		//about 3% more chain steps and no extra timers (harness: Star Trek
+		//458 -> 474 steps, 27 -> 26 timers), which is a fair price for a
+		//setting that simply works when toggled.
 	}
 
 	//Saving the current loading position
@@ -279,7 +277,7 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 	//normal chunkSize as before.
 	var reqLen = HTMLBook.chunkSize;
 	var chapterBoundaryReached = -1;
-	if (this.chapterBreaksImportEnabled && this.reader && this.reader.offsets && this.reader.offsets.length > 0) {
+	if (this.reader && this.reader.offsets && this.reader.offsets.length > 0) {
 		var maxReach = currPos + HTMLBook.chunkSize;
 		for (var ci = 0; ci < this.reader.offsets.length; ci++) {
 			var boundary = this.reader.offsets[ci].start;

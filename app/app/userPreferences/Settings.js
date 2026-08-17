@@ -39,9 +39,9 @@ enyo.kind({
 					{kind: "RowGroup", components: [
 						{kind: "HFlexBox", components: [
 							{content: $L("Apply chapter breaks"), flex: 1},
-							{kind: "ToggleButton", name: "chapterBreaksBtn", state: false, onChange: "saveChapterBreaksChange"},
+							{kind: "ToggleButton", name: "chapterBreaksBtn", state: true, onChange: "saveChapterBreaksChange"},
 						]},
-						{content: $L("Page break between chapters. Off by default - can noticeably slow importing new books."), className: "loginFormDescription"},
+						{content: $L("Start each chapter on a new page."), className: "loginFormDescription"},
 					]},
 					{kind: "RowGroup", components: [
 						{kind: "HFlexBox", components: [
@@ -153,7 +153,7 @@ enyo.kind({
 			this.$.fontSelector.setValue(settings.currentFontType || 0);
 			this.$.fontSizeSelector.setValue(settings.currentFontSize || 18);
 			this.$.volumeKeysBtn.setState(settings.volumeKeyPageTurn || false);
-			this.$.chapterBreaksBtn.setState(settings.chapterPageBreaks === true);
+			this.$.chapterBreaksBtn.setState(settings.chapterPageBreaks !== false);
 			this.$.keepScreenOnBtn.setState(settings.keepScreenOnReading || false);
 			this.$.aiFeaturesBtn.setState(settings.enableAIFeatures || false);
 			this.$.syncEnabledBtn.setState(settings.syncEnabled || false);

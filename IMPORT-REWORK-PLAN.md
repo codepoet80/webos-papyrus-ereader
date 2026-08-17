@@ -1,6 +1,6 @@
 # Import Rework Plan
 
-> ## STATUS: P0–P3 implemented (build v199, uncommitted, device verification pending)
+> ## STATUS: P0–P3 complete — shipped as 1.6.0 (build v204), verified on device and in the PWA. Uncommitted.
 >
 > **The root cause turned out to be F16, found during P3:** `concatArray` in
 > `src/io/Bytes.js` — the engine's most-used primitive — appended *backwards*,
@@ -14,7 +14,23 @@
 > Done: F1 F2 F3 F4 F5 F6 F8 F13 F16, plus the trampoline (P3.1), batched
 > writes (P3.2), pre-flight (P2.3) and the spinner rework.
 > Deferred: F7 (largely subsumed by F16; residual is now linear — see P3.3),
-> F9 (still default-off, needs a clean device A/B), F10/F11/F14.
+> F10/F11/F14.
+>
+> **F9 resolved — chapter breaks are ON by default again.** Their apparent
+> 10–20× import cost was F16 all along; with that fixed the harness shows
+> identical work either way (Star Trek: 474 steps / 18 writes with breaks on
+> *or* off). Two related changes:
+> * Boundaries are now recorded at import **unconditionally**. Gating capture
+>   on the preference was a design bug: boundaries live in the book's stored
+>   metadata, so a book imported while the preference was off had none, and
+>   turning the preference on later did nothing until re-import. It shipped
+>   that way briefly and was caught in the PWA. The preference now controls
+>   **display only** (`PageFitter.chapterBreaksEnabled`), so toggling it takes
+>   effect on the next book open.
+> * Books imported before build v204 still have no stored boundaries and need
+>   one re-import. Anything imported from v204 on works immediately.
+>
+> Verified on device (webOS 1.6.0) and in the PWA.
 >
 > **Automated verification** (run all three after any change):
 > ```
@@ -24,8 +40,9 @@
 >   NODE_PATH=<dir with jsdom> node tools/import-bench.js /tmp/patho
 > ```
 >
-> **Still required:** on-device install + Luna restart + the benchmark protocol
-> below, to confirm real wall-clock. Nothing here has run on a TouchPad yet.
+> **Verified:** TouchPad import speed confirmed good by the user; PWA import,
+> chapter breaks, and the cancel/lock fix all confirmed working. Still worth
+> recording once: a clean IMPORTSTATS line as the device baseline (below).
 
 Companion to `IMPORT-AUDIT.html` (finding IDs F1–F16 refer to that document).
 This is an implementation spec: each phase lists exact files, exact edit sites,

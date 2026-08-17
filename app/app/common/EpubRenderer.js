@@ -356,7 +356,7 @@ enyo.kind({
 	isChapterBreaksEnabled: function() {
 		try {
 			var settings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
-			return settings.chapterPageBreaks === true;
+			return settings.chapterPageBreaks !== false;
 		} catch (e) {
 			return false;
 		}

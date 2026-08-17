@@ -12,10 +12,10 @@ function PageFitter(book, offscreenElement, encoding) {
 	this.encoding = encoding;
 
 	//Whether chapter/spine-item boundaries force a page break (see
-	//fitPageForward/fitPageBackward's pageMax/pageMin). Defaults off; the
+	//fitPageForward/fitPageBackward's pageMax/pageMin). Defaults on; the
 	//app-level renderer sets this from the "Apply chapter breaks"
-	//preference (default off - see HTMLBook.readFromReader for why).
-	this.chapterBreaksEnabled = false;
+	//preference (default on). Books store their boundaries either way.
+	this.chapterBreaksEnabled = true;
 
 	//this.cnt = 0;
 }
