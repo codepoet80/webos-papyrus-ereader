@@ -152,6 +152,9 @@ enyo.kind({
 
 			self.pageFitter = new PageFitter(book, offscreenNode, 2);  // 2 = UTF-8 encoding
 			self.preloaderFitter = new PageFitter(book, self.$.preloadOffscreen.hasNode(), 2);
+			var chapterBreaksEnabled = self.isChapterBreaksEnabled();
+			self.pageFitter.chapterBreaksEnabled = chapterBreaksEnabled;
+			self.preloaderFitter.chapterBreaksEnabled = chapterBreaksEnabled;
 
 			// Signal that the book is ready
 			self.bookReady = true;
@@ -230,6 +233,9 @@ enyo.kind({
 					// Create the PageFitter
 					self.pageFitter = new PageFitter(book, self.$.offscreen.hasNode(), 2);  // 2 = UTF-8 encoding
 					self.preloaderFitter = new PageFitter(book, self.$.preloadOffscreen.hasNode(), 2);
+					var chapterBreaksEnabled = self.isChapterBreaksEnabled();
+					self.pageFitter.chapterBreaksEnabled = chapterBreaksEnabled;
+					self.preloaderFitter.chapterBreaksEnabled = chapterBreaksEnabled;
 
 					// Signal that the book is ready
 					self.bookReady = true;
@@ -337,6 +343,20 @@ enyo.kind({
 		try {
 			var settings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
 			return settings.basicReadingMode === true;
+		} catch (e) {
+			return false;
+		}
+	},
+
+	/**
+	 * Check if chapter/spine-item boundaries should force a page break.
+	 * Default OFF ("Apply chapter breaks" in Settings) - see
+	 * HTMLBook.readFromReader for the confirmed import-time cost.
+	 */
+	isChapterBreaksEnabled: function() {
+		try {
+			var settings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
+			return settings.chapterPageBreaks === true;
 		} catch (e) {
 			return false;
 		}

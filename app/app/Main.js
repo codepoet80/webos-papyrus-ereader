@@ -69,12 +69,21 @@ enyo.kind({
 			{kind: "Button", content: $L("OK"), className: "enyo-button-dark", onclick: "dismissErr"}
 		]},
 
-		// Spinner popup for loading with progress text. Keep it non-modal: on
-		// webOS 3, a modal/scrim popup can delay WebSQL work until it closes.
-		{name: "spinnerPopup", kind: "Popup", className: "spinner-popup", lazy: false, dismissWithClick: false, modal: false, scrim: false, components: [
-			{kind: "VFlexBox", align: "center", components: [
+		// Import/loading dialog.
+		//   modal:true  - blocks taps on the library behind it, so the user cannot
+		//                 start a competing action mid-import.
+		//   scrim:false - deliberately NO dimming overlay. Commit 6841194 found
+		//                 that a modal/scrim popup can delay WebSQL work on webOS 3
+		//                 until it closes, which is the exact class of import
+		//                 slowdown this rework exists to eliminate. Blocking input
+		//                 does not require the scrim, so we take the safe half.
+		// The fixed-width body keeps the dialog from resizing (and therefore
+		// visually drifting off-center) as the progress text changes length.
+		{name: "spinnerPopup", kind: "Popup", className: "spinner-popup", lazy: false, dismissWithClick: false, modal: true, scrim: false, components: [
+			{kind: "VFlexBox", align: "center", style: "width: 320px;", components: [
 				{kind: "Spinner", name: "importSpinner", showing: true},
-				{name: "spinnerText", content: "Loading...", style: "color: white; margin-top: 10px; font-size: 16px;"}
+				{name: "spinnerText", content: "Loading...", style: "color: white; margin-top: 10px; font-size: 16px; text-align: center;"},
+				{kind: "Button", name: "spinnerCancelBtn", content: $L("Cancel"), showing: false, className: "enyo-button-negative", style: "margin-top: 14px; min-width: 160px;", onclick: "cancelActiveImport"}
 			]}
 		]},
 
@@ -154,6 +163,18 @@ enyo.kind({
 		PapyrusSyncManager.pullSettings(function(changed) {
 			if (changed) { self.loadSettings(); }
 		});
+
+		// Reclaim book databases nothing points at any more - e.g. from an
+		// import that was killed midway by a swipe-away or a reboot. Delayed so
+		// it never competes with launch, and it only touches registry entries
+		// older than a day so it can never race a running import. See audit F6.
+		setTimeout(function() {
+			try {
+				new FileImporter().sweepOrphanDbs(86400000);
+			} catch (e) {
+				enyo.warn("DB sweep failed: " + e);
+			}
+		}, 15000);
 	},
 
 	/**
@@ -268,12 +289,17 @@ enyo.kind({
 	/**
 	 * Show spinner popup with message
 	 */
-	showSpinnerPopup: function(message) {
+	showSpinnerPopup: function(message, showCancel) {
 		if (this.$.spinnerText) {
 			this.$.spinnerText.setContent(message || "Loading...");
 		}
 		if (this.$.importSpinner) {
 			this.$.importSpinner.show();
+		}
+		// Cancel is only meaningful for imports, which are the only cancellable
+		// long operation; other spinner users (scanning, sample books) pass nothing.
+		if (this.$.spinnerCancelBtn) {
+			this.$.spinnerCancelBtn.setShowing(showCancel === true);
 		}
 		// Only call openAtCenter() once; subsequent calls just update the text.
 		// Calling openAtCenter() every time re-triggers the open animation,
@@ -294,6 +320,33 @@ enyo.kind({
 		}
 		if (this.$.importSpinner) {
 			this.$.importSpinner.hide();
+		}
+	},
+
+	/**
+	 * Cancel the running import (Cancel button on the import dialog).
+	 *
+	 * This genuinely stops the engine: ImportSession.cancel() makes every
+	 * deferred step in EpubReader/HTMLBook/Inflate return immediately, so the
+	 * chain dies instead of continuing to parse and write in the background
+	 * (audit F1).  The per-book callback never fires for a silent cancel, so
+	 * the queue is advanced by the watchdog, which we shorten here to make the
+	 * handoff prompt.
+	 */
+	cancelActiveImport: function() {
+		if (ImportSession.current) {
+			ImportSession.current.cancel("user cancelled");
+		}
+		if (this.$.spinnerText) {
+			this.$.spinnerText.setContent("Cancelling...");
+		}
+		if (this.$.spinnerCancelBtn) {
+			this.$.spinnerCancelBtn.setShowing(false);
+		}
+		// Re-arm the watchdog on its short cancelled-import path so importNext()
+		// picks up the next book (or closes out) within a second.
+		if (this._importKeepAlive) {
+			this._importKeepAlive("Cancelling...");
 		}
 	},
 
@@ -876,6 +929,12 @@ enyo.kind({
 		if (!filePaths || filePaths.length === 0) {
 			return;
 		}
+		// Single-flight: a second concurrent import competes for the JS thread
+		// and the WebSQL queue and makes both crawl (audit F3).
+		if (ImportSession.current) {
+			this.showError("Import", "An import is already running. Please wait for it to finish, or cancel it.");
+			return;
+		}
 
 		this.dismissIOSPickerOverlay();
 
@@ -943,13 +1002,24 @@ enyo.kind({
 					var msg = "Importing " + (current + 1) + " of " + total;
 					var phaseStr = phase || "";
 					msg += phaseStr ? (": " + phaseStr) : "...";
-					self.showSpinnerPopup(msg);
+					self.showSpinnerPopup(msg, true);
 				}
 
 				clearTimeout(importWatchdog);
-				var timeoutMs = contentProcessingStarted ? 300000 : 180000;
+				// A cancelled import stops silently - its per-book callback never
+				// fires - so watch for that on a short timer and hand the queue along.
+				var cancelled = !!(importer.session && importer.session.cancelled);
+				var timeoutMs = cancelled ? 500 : (contentProcessingStarted ? 300000 : 180000);
 				importWatchdog = setTimeout(function() {
 					if (!importCallbackFired) {
+						if (importer.session && importer.session.cancelled) {
+							importCallbackFired = true;
+							self.log("Import cancelled: " + displayName);
+							errors.push(displayName + ": " + importer.session.failReason);
+							current++;
+							setTimeout(importNext, 100);
+							return;
+						}
 						if (contentProcessingStarted) {
 							self.log("Import watchdog: still processing " + displayName + " (phase: " + (lastImportPhase || "content") + ")");
 							lastSpinnerUpdate = 0;
@@ -958,16 +1028,22 @@ enyo.kind({
 						}
 						importCallbackFired = true;
 						self.log("Import watchdog: no activity for " + Math.round(timeoutMs / 1000) + "s on " + displayName);
+						// Actually stop the engine. Before this, an abandoned import kept
+						// parsing and writing for minutes, competing with whatever the user
+						// did next - the main source of nondeterministic timings (audit F1).
+						if (importer.session) { importer.session.cancel("watchdog timeout"); }
 						errors.push(displayName + ": timed out");
 						current++;
-						enyo.windows.setWindowProperties(window, {blockScreenTimeout: false});
 						self.hideSpinnerPopup();
 						setTimeout(function() {
 							self.showError("Import Error", "Import timed out. The file may be corrupt or too large.");
 						}, 250);
+						// Keep the multi-book queue moving; it used to stall here (audit F4).
+						setTimeout(importNext, 400);
 					}
 				}, timeoutMs);
 			};
+			self._importKeepAlive = keepAlive;
 			keepAlive(); // arm the watchdog
 
 			importer.importEpub(filePath, function(book, error) {
@@ -1248,7 +1324,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v175)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v203)");
 		this.$.aboutPopup.openAtCenter();
 	},
 

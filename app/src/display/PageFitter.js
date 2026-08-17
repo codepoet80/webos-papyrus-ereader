@@ -10,7 +10,13 @@ function PageFitter(book, offscreenElement, encoding) {
 	this.book = book;
 	//And its encoding
 	this.encoding = encoding;
-	
+
+	//Whether chapter/spine-item boundaries force a page break (see
+	//fitPageForward/fitPageBackward's pageMax/pageMin). Defaults off; the
+	//app-level renderer sets this from the "Apply chapter breaks"
+	//preference (default off - see HTMLBook.readFromReader for why).
+	this.chapterBreaksEnabled = false;
+
 	//this.cnt = 0;
 }
 
@@ -161,8 +167,10 @@ PageFitter.prototype.returnPage = function(callback, buffer) {
 
 PageFitter.prototype.handleImages = function(size, text, callback){
 	//console.log("handleImages");
-	//Extracting the img tags from the stream
-	var imgs = text.match(/<img[\s]+label=\"[\S]+\"[\s]*\/*>/g);
+	//Extracting the img tags from the stream. "w"/"h" are optional - only
+	//present for images imported after explicit-size support was added;
+	//older already-imported books just have the plain label form.
+	var imgs = text.match(/<img[\s]+label=\"[^\"]+\"(?:[\s]+w=\"\d+\")?(?:[\s]+h=\"\d+\")?[\s]*\/*>/g);
 	//Checking if there were img tags
 	if (imgs == null || imgs.length <= 0) {
 		callback(text);
@@ -181,18 +189,23 @@ PageFitter.prototype.handleImages = function(size, text, callback){
 			callback(textObj.val);
 		}
 	}
-	
+
 	var textObj = { val: text };
 	var cntrObj = { val: 0 };
 	var cntrTarget = imgs.length;
-	
+
 	//Fetching img labels, creating their tags and calling insertTag
 	for (var i = 0; i < imgs.length; i += 1) {
-		var label = imgs[i].match(/\"[\S]+\"/)[0];
-		label = label.slice(1, label.length - 1);
+		var labelMatch = imgs[i].match(/label=\"([^\"]+)\"/);
+		var label = labelMatch ? labelMatch[1] : null;
+		//The ePub's own declared display size, if the source HTML had one
+		var wMatch = imgs[i].match(/[\s]w=\"(\d+)\"/);
+		var hMatch = imgs[i].match(/[\s]h=\"(\d+)\"/);
+		var explicitSize = (wMatch && hMatch) ?
+			{ w: parseInt(wMatch[1], 10), h: parseInt(hMatch[1], 10) } : null;
 		//With the label, we can get the img data
 		this.book.getImage(label,
-			this.handleImage.bind(this, size,
+			this.handleImage.bind(this, size, explicitSize,
 				insertTag.bind(this, size, textObj, cntrObj, cntrTarget,
 					callback, imgs[i]
 				)
@@ -201,18 +214,28 @@ PageFitter.prototype.handleImages = function(size, text, callback){
 	}
 }
 
-PageFitter.prototype.handleImage = function(size, callback, data) {
+PageFitter.prototype.handleImage = function(size, explicitSize, callback, data) {
 	// Limit image height to 60% of screen to leave room for text
 	var maxImageHeight = Math.floor(size * 0.6);
 
 	//The height getter function
-	var getHeight = function(maxHeight, img, callback) {
+	var getHeight = function(maxHeight, explicitSize, img, callback) {
 		if (img == null) {
 			callback(null);
 			return;
 		}
-		var h = img.height;
-		var w = img.width;
+		var h, w;
+		if (explicitSize && explicitSize.w > 0 && explicitSize.h > 0) {
+			// Honor the ePub's own declared display size instead of always
+			// deriving it from the raw image's native pixel dimensions -
+			// this is how the source book scales the image (e.g. a large
+			// source photo intentionally shown small, or vice versa).
+			w = explicitSize.w;
+			h = explicitSize.h;
+		} else {
+			h = img.height;
+			w = img.width;
+		}
 
 		// Scale image to fit within maxHeight while maintaining aspect ratio
 		if (h > maxHeight) {
@@ -234,8 +257,8 @@ PageFitter.prototype.handleImage = function(size, callback, data) {
 	//Creating an image
 	var img = new Image();
 	img.src = "data:image;base64," + data;
-	img.onload = getHeight.bind(this, maxImageHeight, img, callback);
-	img.onerror = getHeight.bind(this, maxImageHeight, null, callback);
+	img.onload = getHeight.bind(this, maxImageHeight, explicitSize, img, callback);
+	img.onerror = getHeight.bind(this, maxImageHeight, explicitSize, null, callback);
 }
 
 /**
@@ -319,6 +342,15 @@ PageFitter.prototype.fitPageForward = function(size, start, callback, state, buf
 		 */ 
 		this.innerLen = 1;
 		this.outerLen = 512;
+		//The furthest this page is allowed to extend: either the end of the
+		//book, or the end of the current chapter if the book has chapter
+		//boundaries recorded (see HTMLBook.chapterBreaks) - this forces a
+		//page break at each chapter/spine-item boundary instead of flowing
+		//chapters together.
+		this.pageMax = Math.max(1,
+			((this.chapterBreaksEnabled && this.book.getChapterEnd) ? this.book.getChapterEnd(start) : this.getLength()) - start
+		);
+		this.outerLen = Math.min(this.outerLen, this.pageMax);
 		state = (this.sanitizePosition && start > 0) ? -1 : 1;
 		this.sanitizePosition = false;
 		//state = 1;
@@ -354,18 +386,19 @@ PageFitter.prototype.fitPageForward = function(size, start, callback, state, buf
 					);
 				} else {
 					//We reduce outerLen by the number of dropped bytes
-					this.outerLen -= buffer.dropped; 
+					this.outerLen -= buffer.dropped;
 					//We check the buffer if it fit
 					if (buffer.fits) {
-						//Checking if we reached / exceeded the end
-						if (start + this.outerLen >= this.getLength()) {
+						//Checking if we reached / exceeded the end of the book,
+						//or the end of the current chapter (forced page break)
+						if (this.outerLen >= this.pageMax) {
 							//We reached the end, and it fit, callback
-							callback(start, this.getLength() - start);
+							callback(start, this.pageMax);
 							return;
 						}
 						//We found a fitting buffer, adjusting inner & outer len
 						this.innerLen = this.outerLen;
-						this.outerLen *= 2;
+						this.outerLen = Math.min(this.outerLen * 2, this.pageMax);
 						//And we fetch a new buffer
 						this.readReplaceAndFit(size, start, this.outerLen,
 							this.fitPageForward.bind(this, size, start, callback, 1)
@@ -438,6 +471,11 @@ PageFitter.prototype.fitPageBackward = function(size, end, callback, state, buff
 		//outlined in fitPageForward()
 		this.innerLen = 1;
 		this.outerLen = 512;
+		//The earliest this page is allowed to start: either the book start,
+		//or the start of the current chapter (see fitPageForward's pageMax
+		//for the matching forward-direction forced page break).
+		this.pageMin = (this.chapterBreaksEnabled && this.book.getChapterStart) ? this.book.getChapterStart(Math.max(0, end - 1)) : 0;
+		this.outerLen = Math.min(this.outerLen, end - this.pageMin);
 		state = 1;
 	}
 	//Set this value to false in the loop when you call this method as a callback
@@ -450,7 +488,7 @@ PageFitter.prototype.fitPageBackward = function(size, end, callback, state, buff
 				//Checking if we need to read, or check
 				if (!buffer || buffer == null) {
 					//We must read
-					var start = Math.max(0, end - this.outerLen);
+					var start = Math.max(this.pageMin, end - this.outerLen);
 					this.outerLen = Math.min(end - start, this.outerLen);
 					this.readReplaceAndFit(size, start, this.outerLen,
 						this.fitPageBackward.bind(this, size, end, callback, 1)
@@ -458,19 +496,21 @@ PageFitter.prototype.fitPageBackward = function(size, end, callback, state, buff
 				} else {
 					//We check the if the buffer had fit
 					if (buffer.fits) {
-						var start = Math.max(0, end - this.outerLen);
-						//Checking if we reached / exceeded the end
-						if (start <= 0) {
+						var start = Math.max(this.pageMin, end - this.outerLen);
+						//Checking if we reached / exceeded the start of the
+						//book, or the start of the current chapter (forced
+						//page break)
+						if (start <= this.pageMin) {
 							//We reached the start, we fit it into the screen and return
-							//console.log("Reached book start on scroll back.");
-							this.fitPageForward(size, 0, callback);
+							//console.log("Reached book/chapter start on scroll back.");
+							this.fitPageForward(size, this.pageMin, callback);
 							return;
 						}
 						//We found a fitting buffer, adjusting inner & outer len
 						this.innerLen = this.outerLen;
-						this.outerLen *= 2;
+						this.outerLen = Math.min(this.outerLen * 2, end - this.pageMin);
 						//And we fetch a new buffer
-						var start = Math.max(0, end - this.outerLen);
+						var start = Math.max(this.pageMin, end - this.outerLen);
 						this.readReplaceAndFit(size, start, this.outerLen,
 							this.fitPageBackward.bind(this, size, end, callback, 1)
 						);

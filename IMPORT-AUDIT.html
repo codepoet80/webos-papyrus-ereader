@@ -1,0 +1,322 @@
+<title>Papyrus Import Pipeline Audit</title>
+<style>
+  :root {
+    --ground: #F6F3EB;
+    --panel: #EFEAE0;
+    --ink: #2A251E;
+    --ink-soft: #5C554A;
+    --line: #D8D1C2;
+    --accent: #33604F;
+    --accent-soft: #E3E9E2;
+    --mono-bg: #ECE7DA;
+    --crit: #9E3B2C;
+    --crit-bg: #F2DFD9;
+    --major: #8F6414;
+    --major-bg: #F0E6CE;
+    --minor: #5F6A60;
+    --minor-bg: #E4E6DF;
+    --note: #4A5B78;
+    --note-bg: #E0E4EB;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #191612;
+      --panel: #211D18;
+      --ink: #E9E2D2;
+      --ink-soft: #A89E8D;
+      --line: #3A342B;
+      --accent: #7FB49A;
+      --accent-soft: #24322B;
+      --mono-bg: #262219;
+      --crit: #D98A77;
+      --crit-bg: #3A2620;
+      --major: #D2A855;
+      --major-bg: #362D1A;
+      --minor: #A6B0A4;
+      --minor-bg: #272B26;
+      --note: #92A7C7;
+      --note-bg: #222834;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #191612;
+    --panel: #211D18;
+    --ink: #E9E2D2;
+    --ink-soft: #A89E8D;
+    --line: #3A342B;
+    --accent: #7FB49A;
+    --accent-soft: #24322B;
+    --mono-bg: #262219;
+    --crit: #D98A77;
+    --crit-bg: #3A2620;
+    --major: #D2A855;
+    --major-bg: #362D1A;
+    --minor: #A6B0A4;
+    --minor-bg: #272B26;
+    --note: #92A7C7;
+    --note-bg: #222834;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: Charter, Georgia, 'Iowan Old Style', serif;
+    line-height: 1.55;
+    margin: 0;
+    padding: 0 20px 80px;
+    font-size: 17px;
+  }
+  main { max-width: 46rem; margin: 0 auto; }
+  header { padding: 56px 0 8px; border-bottom: 3px double var(--line); margin-bottom: 12px; }
+  h1 {
+    font-size: 2rem; line-height: 1.15; margin: 0 0 10px; text-wrap: balance;
+    letter-spacing: -0.01em;
+  }
+  .meta {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.72rem; color: var(--ink-soft); letter-spacing: 0.04em;
+    display: flex; flex-wrap: wrap; gap: 6px 22px; margin-bottom: 14px;
+  }
+  h2 {
+    font-size: 1.28rem; margin: 48px 0 12px; letter-spacing: -0.005em; text-wrap: balance;
+    color: var(--ink);
+  }
+  h2 .sec { color: var(--accent); font-family: ui-monospace, Menlo, monospace; font-size: 0.85rem; margin-right: 10px; letter-spacing: 0.06em; }
+  h3 { font-size: 1.02rem; margin: 28px 0 8px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); }
+  code, .path {
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 0.82em; background: var(--mono-bg); padding: 1px 5px; border-radius: 3px;
+  }
+  pre {
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.76rem;
+    background: var(--mono-bg); border: 1px solid var(--line); border-radius: 4px;
+    padding: 12px 14px; overflow-x: auto; line-height: 1.5; margin: 0 0 16px;
+  }
+  pre code { background: none; padding: 0; }
+  .lede { font-size: 1.06rem; color: var(--ink); }
+  .callout {
+    border-left: 3px solid var(--accent); background: var(--accent-soft);
+    padding: 12px 16px; margin: 0 0 16px; border-radius: 0 4px 4px 0;
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  table {
+    border-collapse: collapse; width: 100%; font-size: 0.85rem; margin: 0 0 8px;
+    font-variant-numeric: tabular-nums;
+  }
+  .tablewrap { overflow-x: auto; margin: 0 0 16px; }
+  th {
+    text-align: left; font-family: ui-monospace, Menlo, monospace; font-size: 0.68rem;
+    letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-soft);
+    border-bottom: 2px solid var(--line); padding: 6px 14px 6px 0; font-weight: 600;
+  }
+  td { border-bottom: 1px solid var(--line); padding: 7px 14px 7px 0; vertical-align: top; }
+  .finding {
+    border: 1px solid var(--line); border-radius: 6px; background: var(--panel);
+    padding: 18px 20px 8px; margin: 0 0 18px;
+  }
+  .finding h3 { margin: 0 0 6px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .fid { font-family: ui-monospace, Menlo, monospace; color: var(--accent); font-size: 0.85rem; }
+  .chip {
+    display: inline-block; font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.62rem; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 2px 8px; border-radius: 999px; font-weight: 700; position: relative; top: -2px;
+  }
+  .chip.crit  { color: var(--crit);  background: var(--crit-bg); }
+  .chip.major { color: var(--major); background: var(--major-bg); }
+  .chip.minor { color: var(--minor); background: var(--minor-bg); }
+  .chip.note  { color: var(--note);  background: var(--note-bg); }
+  .where {
+    font-family: ui-monospace, Menlo, monospace; font-size: 0.72rem; color: var(--ink-soft);
+    margin: 0 0 10px;
+  }
+  ul, ol { margin: 0 0 14px; padding-left: 1.3em; }
+  li { margin-bottom: 5px; }
+  .small { font-size: 0.85rem; color: var(--ink-soft); }
+  .phase { font-weight: 700; color: var(--accent); }
+  strong { font-weight: 700; }
+</style>
+
+<main>
+<header>
+  <h1>Papyrus Import Pipeline Audit</h1>
+  <div class="meta">
+    <span>2026-08-16</span>
+    <span>working tree @ build v194 (1.5.9) vs release 2415d70 (1.5.8)</span>
+    <span>evidence: full-source read &middot; git archaeology &middot; on-device forensics</span>
+  </div>
+</header>
+
+<div class="callout" style="border-left-color: var(--crit); background: var(--crit-bg);">
+<p><strong>UPDATE &mdash; root cause found and fixed.</strong> The single biggest cause was <strong>F16: <code>concatArray</code>, the engine&rsquo;s most-used primitive, was quadratic</strong>. It filled backwards, writing past the end of the destination array first, which permanently degraded every accumulating byte buffer into a sparse/dictionary array. Measured cost of accumulating 1.3MB in 4KB pieces: <strong>58.5 seconds</strong> backwards versus <strong>31 milliseconds</strong> forwards (~1900&times;). Because the penalty scales with how much has <em>already</em> been accumulated, small books were fine and large ones appeared to hang &mdash; the exact content-dependent behaviour that made this look nondeterministic. All findings below stand; this one explains the magnitude.</p>
+</div>
+
+<p class="lede">Why does the same book import in 90 seconds on one run and 10&ndash;25 minutes on another? Two compounding answers. First, a quadratic core primitive (F16) made cost explode with book size. Second, <strong>the import engine could not be stopped, could not report its own failures, and could not detect a competitor</strong> &mdash; so every abandoned, timed-out, or repeated import kept running invisibly, stacked on top of the next one. On top of those sit several book-dependent pathologies inherited from different eras of the codebase. This was not one bug; it was an architecture that turned every small problem into a nondeterministic one.</p>
+
+<h2><span class="sec">&sect;1</span>How the pipeline actually works</h2>
+<p>Every import is a chain of thousands of tiny steps connected by <code>Function.prototype.defer()</code> &mdash; which in this app is <code>setTimeout(fn,&nbsp;10)</code> (<span class="path">MojoCompat.js:269</span>). The chain has four phases:</p>
+<div class="tablewrap"><table>
+<tr><th>Phase</th><th>What runs</th><th>Defer-linked steps (Star&nbsp;Trek book)</th></tr>
+<tr><td>1. Load + unzip</td><td><code>File</code> (100ms polling) &rarr; <code>ZipFile</code> parse</td><td>~2</td></tr>
+<tr><td>2. Parse ePub</td><td><code>EpubReader</code>: OPF &rarr; per-entry <code>Inflate</code> (defer per DEFLATE block) &rarr; <code>filterMarkup</code> &mdash; <strong>all 22 chapters filtered as concurrent interleaved chains</strong>, 4KB per step</td><td>~250</td></tr>
+<tr><td>3. Cover</td><td>decompress + <code>btoa</code> + canvas thumbnail</td><td>~40</td></tr>
+<tr><td>4. Store</td><td><code>HTMLBook</code>: 16KB read &rarr; re-parse &rarr; base91 &rarr; one WebSQL transaction per chunk + per image</td><td>~80 steps, ~40 transactions</td></tr>
+</table></div>
+<p>Implications that matter for everything below: at a 10ms timer floor, ~400 defers is a 4&ndash;20&nbsp;second tax before any real work; <strong>every other consumer of the JS thread or the WebSQL queue directly stretches the chain</strong>; and no step has a try/catch, a cancellation check, or an owner that knows whether it is still wanted.</p>
+
+<h2><span class="sec">&sect;2</span>Why the same book takes 90&nbsp;s, 10&nbsp;min, or 25&nbsp;min</h2>
+<p>The variance is not one branch misfiring &mdash; it is the <em>compounding</em> of independent multipliers on a pipeline with no isolation:</p>
+<ul>
+  <li><strong>Zombie chains (F1).</strong> Nothing ever stops an import. Watchdog &ldquo;timeout,&rdquo; navigating away, opening a book, starting a new import &mdash; the old chain keeps running to completion, minutes later. Two interleaved chains &gt; 2&times; slower each (defer queue doubles, transactions serialize). Device evidence: today&rsquo;s &ldquo;abandoned&rdquo; runs all have <em>completed</em> DB files with late mtimes.</li>
+  <li><strong>In-app activity (F11).</strong> The user opened and read books during imports (confirmed in logs at 16:39). PageFitter&rsquo;s binary search runs dozens of layout/DB operations on the same thread and same WebSQL queue.</li>
+  <li><strong>Silent failure (F2).</strong> One uncaught exception anywhere in a chain kills that chain with no error &mdash; the UI shows the last phase forever. What looks like &ldquo;slow&rdquo; is sometimes &ldquo;dead.&rdquo; (The Mad Libs bug at the start of this session was exactly this class.)</li>
+  <li><strong>Flash/fsync variance.</strong> ~40 WebSQL transactions &times; 50ms&ndash;1s+ each depending on competing I/O.</li>
+  <li><strong>Test-environment noise (F12).</strong> Stale code served without a Luna restart, system log level left at <code>info</code> (my doing &mdash; revert it), and two different devices used across today&rsquo;s A/Bs. Several of today&rsquo;s data points are unreliable.</li>
+</ul>
+<div class="callout"><p>The one clean measurement &mdash; fresh device, fresh launch, 1.5.8, nothing else running &mdash; was 90&nbsp;seconds. Static analysis of the current OFF-path shows byte-for-byte the same work as 1.5.8 plus ~5s of cover handling. Any observed gap beyond that on a given run is environmental, and the architecture currently has no defenses against any of it.</p></div>
+
+<h2><span class="sec">&sect;3</span>Findings</h2>
+
+<div class="finding" style="border-color: var(--crit); border-width: 2px;">
+  <h3><span class="fid">F16</span> <code>concatArray</code> was quadratic &mdash; the core slowdown <span class="chip crit">critical</span> <span class="chip note">FIXED</span></h3>
+  <p class="where">src/io/Bytes.js <code>concatArray</code> &mdash; used by chapter output, plain-byte buffers, inflate output, tag buffers, everything</p>
+  <p>The old implementation appended by filling <em>backwards</em>: it wrote <code>arrayTo[newLength-1]</code> first and worked down. That first write lands far past the array&rsquo;s end, punching a block of holes, which makes the JS engine abandon the packed-array representation for a sparse/dictionary one &mdash; permanently, on an array that only grows. Every subsequent byte append then costs a hash-table operation.</p>
+  <div class="tablewrap"><table>
+  <tr><th>accumulated</th><th>backwards (old)</th><th>forwards (new)</th><th>ratio</th></tr>
+  <tr><td>82 KB</td><td>108 ms</td><td>3 ms</td><td>36&times;</td></tr>
+  <tr><td>328 KB</td><td>2,344 ms</td><td>6 ms</td><td>390&times;</td></tr>
+  <tr><td>655 KB</td><td>12,557 ms</td><td>12 ms</td><td>1,046&times;</td></tr>
+  <tr><td>1.3 MB</td><td>58,512 ms</td><td>31 ms</td><td><strong>1,887&times;</strong></td></tr>
+  </table></div>
+  <p><strong>Why it looked nondeterministic:</strong> the penalty is a function of bytes already accumulated, so it is invisible on a short book and catastrophic on a long one &mdash; and it interacts with anything that changes chunking (which is why toggling chapter breaks appeared to matter so much). Fixed by appending forwards, which keeps the array packed and is linear; semantics unchanged. A 279KB pathological chapter went from 2,016&nbsp;ms to 222&nbsp;ms in-harness, and scaling is now proportional instead of quadratic.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F1</span> Imports cannot be cancelled &mdash; zombie chains <span class="chip crit">critical</span> <span class="chip note">FIXED</span></h3>
+  <p class="where">Main.js:951&ndash;969 &middot; FileImporter.js (all paths) &middot; EpubReader.js / HTMLBook.js / Inflate.js (no abort anywhere)</p>
+  <p>The watchdog &ldquo;abandons&rdquo; a stuck import by setting <code>importCallbackFired = true</code> and walking away &mdash; the chain itself keeps deferring, parsing, and writing until done. There is no code path in the entire engine that stops a running chain. Every abandoned run competes with subsequent runs for the thread and the DB. <strong>This is the primary driver of run-to-run variance.</strong></p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F2</span> No error propagation: any exception = silent forever-hang <span class="chip crit">critical</span> <span class="chip note">FIXED</span></h3>
+  <p class="where">every <code>.defer()</code> site &middot; MojoCompat.js:34&ndash;66 (<code>Synchronize</code>)</p>
+  <p>Chain steps run inside bare <code>setTimeout</code> callbacks with no try/catch. A thrown exception vanishes; the chain dies; <code>Synchronize.pendingCount</code> never reaches zero; the callback that would report success <em>or failure</em> never fires. The UI sits on the last phase message until the watchdog gives up (or forever, once <code>contentProcessingStarted</code> is true &mdash; that branch retries the watchdog indefinitely). Both &ldquo;hung&rdquo; books this session (Mad Libs, Goosebumps) were this exact failure shape.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F3</span> No re-entrancy guard on import <span class="chip major">major</span> <span class="chip note">FIXED</span></h3>
+  <p class="where">Main.js:875 <code>importMultipleEpubs</code></p>
+  <p>Tapping Import while an import runs starts a second full pipeline concurrently. Combined with F1, an impatient user (facing a stuck-looking spinner) manufactures their own slowdown.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F4</span> Watchdog timeout stalls the multi-book queue <span class="chip major">major</span> <span class="chip note">FIXED</span></h3>
+  <p class="where">Main.js:959&ndash;968</p>
+  <p>The pre-content timeout path increments <code>current</code> but never calls <code>importNext()</code> &mdash; the rest of a multi-select import silently never happens, and <code>blockScreenTimeout</code> handling ends early while the zombie continues.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F5</span> &ldquo;Timed-out&rdquo; imports still add themselves to the library later <span class="chip major">major</span> <span class="chip note">FIXED</span></h3>
+  <p class="where">FileImporter.js:183 <code>saveBookMetadata</code> (unconditional)</p>
+  <p>The library write happens inside FileImporter before the (now-ignored) callback. A zombie that eventually completes inserts its book with no view refresh &mdash; phantom entries that appear on next launch.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F6</span> Orphaned database leak on every re-import <span class="chip major">major</span> <span class="chip note">FIXED</span></h3>
+  <p class="where">FileImporter.js:132,167 (<code>generateUniqueId</code> embeds <code>Date.now()</code>) &middot; saveBookMetadata replaces entry without deleting the old DB</p>
+  <p>Confirmed on device: <strong>30 DB files, 107&nbsp;MB</strong>, with duplicate-size clusters (three 7.2&nbsp;MB copies from May&nbsp;25; three 3.86&nbsp;MB Star&nbsp;Trek copies from today alone). Re-importing a book replaces its library entry with a new <code>bookDbName</code>, stranding the old full-content DB forever. WebSQL offers no enumeration API, so existing orphans are unreachable from JS &mdash; only new discipline (delete-before-reimport + a dbName registry) prevents growth. Bonus defect: <code>asin</code> and <code>bookDbName</code> call <code>generateUniqueId</code> separately and get different timestamps.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F7</span> Quadratic re-parse when a tag spans the 4KB filter boundary <span class="chip major">major</span> <span class="chip minor">book-dependent</span></h3>
+  <p class="where">EpubReader.js filterChapter: chunk-carry at ~line 799 vs. parse of full <code>extraBytes</code> each round</p>
+  <p>If a tag doesn&rsquo;t close within the current buffer (giant inline <code>style</code>, base64 data-URI in an attribute, unterminated comment &mdash; classic &ldquo;quirky book&rdquo; material), the dropped tail is carried and the <em>entire accumulated buffer</em> is re-parsed every 4KB round. A tag that never closes within the chapter re-parses an ever-growing buffer ~115 times for a 470KB chapter &mdash; minutes of invisible work, per chapter, labeled &ldquo;Parsing ePub&hellip;&rdquo;.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F8</span> Silent book truncation on any tag &gt; 16KB <span class="chip major">major</span> <span class="chip note">FIXED</span></h3>
+  <p class="where">HTMLBook.js:278&ndash;281 (&ldquo;document ends malformed&rdquo; branch)</p>
+  <p>In the storage pass, a single tag longer than one 16KB chunk (data-URI images survive filtering verbatim inside <code>img label</code>) makes <code>byteBuf.length&nbsp;-&nbsp;dropped&nbsp;&le;&nbsp;0</code>, which is treated as end-of-book: <code>finish()</code> runs and everything after that point is silently discarded. The import &ldquo;succeeds,&rdquo; the book is incomplete.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F9</span> Chapter-boundary chunking: measured 10&ndash;20&times; on device, mechanism unproven <span class="chip major">major</span> <span class="chip note">mitigated: default off</span></h3>
+  <p class="where">HTMLBook.js:248&ndash;261 &middot; gated by <code>chapterPageBreaks</code></p>
+  <p>Static analysis says +27% read/write cycles; the device says 10&ndash;20&times;. The honest position: unexplained, possibly confounded by F1/F12 during every test that measured it (each slow run was itself creating the zombies that slowed the next). Keep it opt-in until the P0 instrumentation below can measure a clean run.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F10</span> Unclosed-tag baggage compounds through the whole book <span class="chip minor">minor</span> <span class="chip minor">book-dependent</span></h3>
+  <p class="where">HTMLBuffer.js (openTagsEnd carried + serialized per buffer) &middot; HTMLParser.addToOpenTagArray</p>
+  <p>Tags that never close (books full of unclosed <code>&lt;div&gt;</code>s pass through the filter) accumulate in <code>openTagsEnd</code>, are cloned per chunk, scanned per closing tag, and serialized into <em>every subsequent buffer record</em> &mdash; a per-chunk cost and storage bloat that grows as the book progresses. Matches the observed &ldquo;starts fast, decelerates&rdquo; shape for some books.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F11</span> Everything shares one thread and one DB queue by design <span class="chip minor">design&nbsp;tax</span></h3>
+  <p class="where">MojoCompat.js defer (10ms floor) &middot; filterMarkup&rsquo;s N-concurrent chains &middot; PageFitter/Sync during import</p>
+  <p>~400+ defers per import is a 4&ndash;20s floor before work. The 22-way concurrent chapter filtering (a pReader-era choice) maximizes interleaving with anything else running. Reading a book mid-import runs pagination binary-searches against the same WebSQL origin. None of this is a bug alone; it is the amplifier for F1/F3.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F12</span> Test-hygiene contaminants in today&rsquo;s measurements <span class="chip note">note</span></h3>
+  <p>webOS serves stale cached app code unless a Luna restart follows install (your rule; several of today&rsquo;s installs got no restart). <code>--system-log-level=info</code> was left on for at least one device (adds system-wide log I/O; I will revert it). Two different devices were used across A/Bs. Conclusion: only the fresh-device 1.5.8 run (90s) and future instrumented runs should be treated as ground truth.</p>
+</div>
+
+<div class="finding">
+  <h3><span class="fid">F13&ndash;F15</span> Small sharp edges <span class="chip minor">minor</span></h3>
+  <ul>
+    <li><strong>F13</strong> Skipped/null-data images are never negative-cached in <code>imgNameBuffer</code> &mdash; every occurrence re-scans, re-warns, and burns a defer (HTMLBook tagWorker).</li>
+    <li><strong>F14</strong> <code>File.refresh</code> polls every 100ms forever if the XHR never reaches readyState 4.</li>
+    <li><strong>F15</strong> Import spinner is non-modal and doesn&rsquo;t re-center on content change (your observation); progress path is already throttled (2s DOM / 5-pct log), which is the right shape &mdash; keep it that way, since UI-update frequency has measurably hurt imports before.</li>
+  </ul>
+</div>
+
+<h2><span class="sec">&sect;4</span>The &ldquo;intertwined eras&rdquo; map</h2>
+<p>Your theory is confirmed in specific places: each era added a layer that a later layer doesn&rsquo;t know about.</p>
+<div class="tablewrap"><table>
+<tr><th>Era / commit</th><th>What it added</th><th>What it conflicts with now</th></tr>
+<tr><td>pReader heritage (initial)</td><td>defer-chain engine, 22-way concurrent filtering, 4KB/16KB double-parse layers, &ldquo;malformed end&rdquo; truncation branch</td><td>assumes it owns the whole device; no cancellation because Mojo apps died with their card</td></tr>
+<tr><td><code>c68dbb2</code> &ldquo;better importer&rdquo;</td><td>watchdog + heartbeat + progress plumbing</td><td>watches the chain but can&rsquo;t stop it (F1); timeout path forgets the queue (F4)</td></tr>
+<tr><td>fix #26 era (<code>92b431b</code>&hellip;<code>b3e3f48</code>)</td><td>oversized-image guards at two layers with two thresholds</td><td>today&rsquo;s cover exemption splits thresholds again (1MB in-chapter vs 1.5MB cover); skipped images trip F13 on every reference</td></tr>
+<tr><td>fix #21 era (<code>e27563a</code>)</td><td><code>&lt;span class=&quot;pb&quot;&gt;</code> chain-breakers emitted by a filter that otherwise <em>drops</em> all spans</td><td>third parse layer (PageFitter) must understand the second layer&rsquo;s synthetic markup</td></tr>
+<tr><td>this session</td><td>chapter-boundary chunking + multi-chapter <code>read()</code> fix + cover exemption</td><td>F9 measured badly in a contaminated environment; exposed the latent <code>read()</code> bug that had been masked since the initial commit</td></tr>
+</table></div>
+
+<h2><span class="sec">&sect;5</span>Remediation plan</h2>
+<p>Ordered so each phase de-risks the next. Nothing below touches parsing behavior until measurement exists.</p>
+<h3><span class="phase">P0 &mdash; Instrument before touching anything</span></h3>
+<ul>
+  <li>One summary log line per import: per-phase wall time, chunk count, transaction count, defer count, bytes. Every future regression becomes diagnosable from a single line instead of a session like today&rsquo;s.</li>
+  <li>Revert device log level to <code>error</code>; re-baseline the Star&nbsp;Trek book on a clean launch.</li>
+</ul>
+<h3><span class="phase">P1 &mdash; Make imports killable and honest (fixes F1&ndash;F5)</span></h3>
+<ul>
+  <li><strong>Import session token:</strong> one object threaded through EpubReader/HTMLBook/Inflate; every chain step checks <code>session.cancelled</code> and exits. Cancel on: watchdog timeout, new import, returning to library during import, app close.</li>
+  <li><strong>Import lock:</strong> <code>importMultipleEpubs</code> refuses while a session is live.</li>
+  <li><strong>Fail-fast errors:</strong> try/catch at the defer trampoline &rarr; <code>session.fail(err)</code> &rarr; the one callback, always called, success or failure.</li>
+  <li>Fix the queue stall; make <code>saveBookMetadata</code> conditional on a live session.</li>
+</ul>
+<h3><span class="phase">P2 &mdash; Pre-flight + hygiene (fixes F6, arms against F7/F8)</span></h3>
+<ul>
+  <li><strong>Pre-flight after OPF parse</strong> (cheap, all metadata already in hand): chapter count and sizes, image count/sizes, largest single tag risk (scan for <code>data:</code> URIs). Decide strategy per book: image skip list, warnings for books that will truncate, honest time estimate.</li>
+  <li>Delete the old DB before re-importing the same book; keep a dbName registry in localStorage so future orphans are findable and purgeable.</li>
+  <li>Negative-cache skipped images (F13).</li>
+</ul>
+<h3><span class="phase">P3 &mdash; Performance, only once P0 can prove it</span></h3>
+<ul>
+  <li>Time-sliced trampoline: run chain steps synchronously up to ~50ms, then yield once &mdash; cuts the 400-defer tax ~10&times; while keeping the UI alive.</li>
+  <li>Batch buffer writes through the existing <code>writeBatch()</code>.</li>
+  <li>Re-evaluate chapter-boundary chunking (F9) with clean instrumentation; keep default-off until proven.</li>
+  <li>Fix F7 (carry only the partial-tag tail, don&rsquo;t re-parse the prefix) and F8 (stream giant tags instead of truncating) &mdash; correctness wins that also remove worst-case cliffs.</li>
+</ul>
+
+<h2><span class="sec">&sect;6</span>Open questions</h2>
+<ul>
+  <li>F9&rsquo;s true mechanism &mdash; unresolved until a clean instrumented A/B exists.</li>
+  <li>Whether webOS throttles background-card timers (would make backgrounded imports crawl by OS policy) &mdash; testable with P0 instrumentation and a deliberate background run.</li>
+  <li>Whether existing orphaned DBs can be reclaimed at all from JS (likely not; may warrant a one-time novacom cleanup script for affected devices).</li>
+</ul>
+
+<p class="small">Sources: full read of Main.js, FileImporter.js, File.js, ZipFile.js, Inflate.js, EpubReader.js, HTMLBook.js, HTMLBuffer.js, HTMLParser.js, Bytes.js, Database.js, MojoCompat.js; git history of the import path; device shell forensics (DB census, storage); session logs from today&rsquo;s device runs.</p>
+</main>

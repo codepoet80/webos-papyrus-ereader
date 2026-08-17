@@ -9,6 +9,13 @@ function EpubReader(zipFile, callback, controller) {
 	
 	//Throughout this file, we deal with xml files, creating an xml parser
 	this.parser = new DOMParser();
+
+	//The import that owns this reader, or null when a book is merely being
+	//read.  Every deferred step below is scheduled through
+	//ImportSession.deferStep so a cancelled import stops dead instead of
+	//running on as a zombie chain, and a step that throws reports an error
+	//instead of vanishing and hanging the UI forever.  See audit F1/F2.
+	this.importSession = ImportSession.capture();
 	
 	//The structure of this file
 	this.structure = {
@@ -52,7 +59,7 @@ function EpubReader(zipFile, callback, controller) {
 	
 	//Now, we process the OPF rootfiles; note that we
 	//do this asynchronously;
-	this.parseRootfiles.bind(this, 0).defer();
+	ImportSession.deferStep(this.importSession, this.parseRootfiles.bind(this, 0));
 }
 
 //An EpubReader implements the ByteReader interface
@@ -63,7 +70,13 @@ EpubReader.prototype = new ByteReader();
 // ~~~ EXTRACTION OF RAW DATA ~~~
 
 EpubReader.prototype.setStreamOK = function() {
-	//We calculate the byte offsets of each chapter
+	//We calculate the raw markup-byte offsets of each chapter. These are
+	//NOT the same coordinate space HTMLBook/PageFitter paginate in (that's
+	//plain-text-with-tags-stripped - see HTMLBuffer.getLength()); HTMLBook
+	//derives plain-text chapter boundaries itself, incrementally, as a
+	//free byproduct of the single parse pass it already has to do during
+	//import (see HTMLBook.readFromReader) - NOT by re-parsing every
+	//chapter a second time here, which made import noticeably slower.
 	this.offsets.length = 0;
 	var currOff = 0;
 	for (var r = 0; r < this.structure.rfData.length; r+=1) {
@@ -81,12 +94,12 @@ EpubReader.prototype.setStreamOK = function() {
 			currOff += chap.data.length;
 		}
 	}
-	
+
 	//We don't need the zip object anymore
 	var lZip = this.zip;
 	this.zip = null;
 	//TODO: We should do a basic sanity check here
-	
+
 	//Callback with ourselves signifies success
 	this.callback(lZip, this);
 }
@@ -241,7 +254,7 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 		//Otherwise, we can decompress the data files
 		//We defer this, to make it more unlikely for WebOS
 		//to kill us.
-		this.getDataContent.bind(this).defer();
+		ImportSession.deferStep(this.importSession, this.getDataContent.bind(this));
 		return;
 	}
 	
@@ -253,9 +266,21 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 	//Checking if it succeeded
 	if (text == null) {
 		//An error occurred, we attempt to read the next file
-		this.parseRootfiles.bind(this, pos+1).defer();
+		ImportSession.deferStep(this.importSession, this.parseRootfiles.bind(this, pos+1));
 		return;
 	}
+	//Some generators (e.g. "EPUBLib version 3.0") prefix every OPF element
+	//with a namespace prefix (<opf:package>, <opf:manifest>, <opf:item>,
+	//<opf:spine>, <opf:itemref>, ...) instead of the usual unprefixed /
+	//default-namespace form. The plain getElementsByTagName("manifest") etc.
+	//lookups below never match a qualified name of "opf:manifest", which
+	//leaves manifest[0] undefined and throws on the next line - since this
+	//runs inside a .defer()'d callback, the exception is uncaught and the
+	//import just hangs forever instead of failing. Strip element-tag
+	//prefixes (not attribute prefixes) before parsing, same text-preprocessing
+	//trick getStructure() already uses for container.xml. dc:title etc. still
+	//resolve via _getTags' existing plain-name fallback below.
+	text = text.replace(/<(\/?)[A-Za-z_][\w.-]*:/g, "<$1");
 	//Creating an xmldoc from this text
 	var xmlDoc = this.parser.parseFromString(text, "text/xml");
 	
@@ -368,7 +393,7 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 	var manifest = xmlDoc.getElementsByTagName("manifest");
 	if (!manifest) {
 		//An error occurred, we attempt to read the next file
-		this.parseRootfiles.bind(this, pos+1).defer();
+		ImportSession.deferStep(this.importSession, this.parseRootfiles.bind(this, pos+1));
 		return;
 	}
 	//Fetching manifest items
@@ -419,7 +444,7 @@ EpubReader.prototype.parseRootfiles = function(pos) {
 		this.structure.rfData.push(data);
 	}
 	//Now, we fetch the next root file
-	this.parseRootfiles.bind(this, pos+1).defer();
+	ImportSession.deferStep(this.importSession, this.parseRootfiles.bind(this, pos+1));
 }
 
 EpubReader.prototype.getDataContent = function(state) {
@@ -460,7 +485,7 @@ EpubReader.prototype.getDataContent = function(state) {
 			}
 		}
 		//Calling the fetcher for the next fragment
-		this.getDataContent.bind(this, state).defer();
+		ImportSession.deferStep(this.importSession, this.getDataContent.bind(this, state));
 	}
 	
 	//Loading the root file
@@ -473,7 +498,7 @@ EpubReader.prototype.getDataContent = function(state) {
 	//Checking if that entry has a valid href
 	if (!load || !load.href) {
 		//Fetching the next fragment
-		loadWorker.bind(this, state, null, null).defer();
+		ImportSession.deferStep(this.importSession, loadWorker.bind(this, state, null, null));
 		return;
 	}
 	//Now, we decompress and add the data from that file
@@ -483,19 +508,25 @@ EpubReader.prototype.getDataContent = function(state) {
 		//Invalid / non-existent file
 		load.data = null;
 		//Fetching the next fragment
-		loadWorker.bind(this, state, null, null).defer();
+		ImportSession.deferStep(this.importSession, loadWorker.bind(this, state, null, null));
 	} else {
 		// On webOS, skip decompressing images that are too large to btoa() without
 		// hanging. HTMLBook.tagWorker has a matching guard. 1MB matches its threshold.
+		// The designated cover gets a higher allowance (matching getCoverImage()'s
+		// own 1.5MB cap) since it is decoded once for the library thumbnail, not
+		// once per in-chapter illustration - the multi-hour-hang risk this guard
+		// exists for (fix #26) does not apply the same way to a single one-off decode.
 		var isWebOS = typeof window !== 'undefined' && typeof window.PalmSystem !== 'undefined';
-		if (isWebOS && state.mode === 2 && zipped.file.uSize > 1048576) {
+		var isCover = root.coverId && load.id === root.coverId;
+		var maxImageBytes = isCover ? (1.5 * 1024 * 1024) : 1048576;
+		if (isWebOS && state.mode === 2 && zipped.file.uSize > maxImageBytes) {
 			enyo.warn("EpubReader: skipping oversized image " + load.href +
 				" (" + Math.round(zipped.file.uSize / 1024) + "KB) on webOS");
 			load.data = null;
-			loadWorker.bind(this, state, null, null).defer();
+			ImportSession.deferStep(this.importSession, loadWorker.bind(this, state, null, null));
 		} else {
 			//We asynchronously decompress, and call the loadWorker afterwards
-			zipped.file.uncompressAsync(loadWorker.bind(this, state, load));
+			zipped.file.uncompressAsync(loadWorker.bind(this, state, load), this.importSession);
 		}
 	}
 }
@@ -547,7 +578,7 @@ EpubReader.prototype.filterMarkup = function() {
 			var doNothing = function() {};
 			var onSuccessWrap = synchronizer.wrap(doNothing);
 			//Now, we defer-start the filtering of this chapter
-			this.filterChapter.bind(this, chap, onSuccessWrap).defer();
+			ImportSession.deferStep(this.importSession, this.filterChapter.bind(this, chap, onSuccessWrap));
 		}
 	}
 }
@@ -722,8 +753,26 @@ EpubReader.prototype.filterChapter = function(chapter, callback, state) {
 				if (tag.closing) { break; }
 				attr = tag.getAttribute("src");
 				if (attr != null && attr.value != null) {
-					//We rename src into label
-					tag.content = "label=\"" + attr.value + "\"";
+					//We rename src into label. The original width/height
+					//attributes (the ePub author's intended display size,
+					//which may differ from the image's native pixel size -
+					//see e.g. img.cvr_img{width:40%} style CSS scaling)
+					//were previously discarded entirely here, so PageFitter
+					//had no choice but to always fall back to the raw
+					//image's native pixel dimensions. Preserve numeric
+					//width/height (if present) as "w"/"h" so PageFitter can
+					//honor them. Percentage/CSS-driven sizes aren't carried
+					//forward since book stylesheets aren't applied at all.
+					var content = "label=\"" + attr.value + "\"";
+					var wAttr = tag.getAttribute("width");
+					var hAttr = tag.getAttribute("height");
+					if (wAttr != null && wAttr.value != null && /^\d+$/.test(wAttr.value)) {
+						content += " w=\"" + wAttr.value + "\"";
+					}
+					if (hAttr != null && hAttr.value != null && /^\d+$/.test(hAttr.value)) {
+						content += " h=\"" + hAttr.value + "\"";
+					}
+					tag.content = content;
 				} else {
 					//Otherwise we drop the tag
 					noStreamTag = true;
@@ -755,12 +804,12 @@ EpubReader.prototype.filterChapter = function(chapter, callback, state) {
 	
 	//If a tag was open at the end of the file, we must re-read it in the next loop
 	if (html.droppedBytes > 0) {
-		state.extraBytes = chapter.data.slice(state.currPos - html.droppedBytes, state.currPos);		
+		state.extraBytes = chapter.data.slice(state.currPos - html.droppedBytes, state.currPos);
 	} else {
 		state.extraBytes.length = 0;
 	}
 	//At the end, we call ourselves deferred to filter the next chunk
-	this.filterChapter.bind(this, chapter, callback, state).defer();
+	ImportSession.deferStep(this.importSession, this.filterChapter.bind(this, chapter, callback, state));
 }
 
 EpubReader.prototype.getModeFromStack = function(actionStack) {
@@ -954,19 +1003,29 @@ EpubReader.prototype.bytesToBase64 = function(bytes) {
 EpubReader.prototype.read = function(start, len) {
 	//console.log("EpubReader.read: " + start);
     //TODO: This simple linear search HAS to be improved later on
+	//A request spanning multiple chapters must advance the position it's
+	//matching offsets against as each chapter's contribution is consumed -
+	//otherwise (as this used to) it only ever matches the FIRST chapter
+	//containing the original "start" and silently returns a short buffer
+	//for every later chapter in the requested range. Went unnoticed for a
+	//long time because every caller only ever requested a fixed chunk size
+	//and tolerated a short return by re-requesting from wherever it
+	//actually got to - harmless there, but it breaks any caller that
+	//deliberately requests a range spanning multiple chapters (e.g.
+	//HTMLBook batching several small chapters into one read).
 	var buf = new Array();
-	for (var i = 0; i < this.offsets.length; i+=1) {
+	var pos = start;
+	for (var i = 0; i < this.offsets.length && buf.length < len; i+=1) {
 		var off = this.offsets[i];
-		if (start >= off.start && start < off.start + off.len) {
+		if (pos >= off.start && pos < off.start + off.len) {
 			//Figuring out the offset & length INSIDE the chapter
-			var iOff = start - off.start;
-			var iLen = Math.min(len, off.len - iOff);
+			var iOff = pos - off.start;
+			var iLen = Math.min(len - buf.length, off.len - iOff);
 			//Streaming bytes into our buffer
 			var chap = this.structure.rfData[off.root].chapters[off.chapter];
 			concatArray(buf, chap.data.slice(iOff, iOff + iLen));
+			pos += iLen;
 		}
-		//Checking if we've buffered enough
-		if (buf.length >= len) { break; }
 	}
 	return buf;
 }

@@ -104,6 +104,12 @@ enyo.kind({
 			});
 		}
 		this.$.gridContainer.render();
+		// Enyo's scroller computes its scroll bounds once and doesn't watch
+		// for DOM changes - without this, it keeps scrolling against
+		// whatever the content size was before this rebuild (often empty),
+		// which lets it pan into space the new, correctly-wrapped grid
+		// doesn't actually occupy.
+		this.$.gridScroller.resized();
 	},
 
 	rebuildListView: function() {
@@ -122,6 +128,7 @@ enyo.kind({
 			});
 		}
 		this.$.listContainer.render();
+		this.$.listScroller.resized();
 	},
 
 	resize: function() {

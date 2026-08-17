@@ -10,6 +10,10 @@ enyo.depends(
 	// Mojo compatibility shim (must load first)
 	"src/MojoCompat.js",
 
+	// Import cancellation token. Loaded before the engine so EpubReader /
+	// HTMLBook / Inflate can reference ImportSession without typeof guards.
+	"app/common/ImportSession.js",
+
 	// Preader rendering engine - core IO
 	"src/io/Bytes.js",
 	"src/io/ByteReader.js",

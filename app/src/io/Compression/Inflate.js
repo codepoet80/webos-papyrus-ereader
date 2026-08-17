@@ -440,7 +440,12 @@ Inflate.prototype.uncompress = function(dest, source, isGzip) {
  * @param {function} callback the function to call with the dest buffer after
  * 		decompression. 
  */
-Inflate.prototype.uncompressAsync = function(source, isGzip, callback) {
+/**
+ * @param {ImportSession|null} session when supplied, a cancelled import stops
+ *        the block loop dead and a thrown block reports an error (audit F1/F2).
+ *        Reading a book passes null, so read-time behavior is unchanged.
+ */
+Inflate.prototype.uncompressAsync = function(source, isGzip, callback, session) {
 	var d = new InfData();
 	
 	/* initialise data */
@@ -487,7 +492,7 @@ Inflate.prototype.uncompressAsync = function(source, isGzip, callback) {
 		//Checking if we're done
 		if (!bfinal) {
 			//Calling self deferred again
-			self.bind(this, d, self, callback).defer();
+			ImportSession.deferStep(session, self.bind(this, d, self, callback));
 		} else {
 			//Finished decompression
 			callback(d.dest);
@@ -495,6 +500,6 @@ Inflate.prototype.uncompressAsync = function(source, isGzip, callback) {
 	}
 	
 	//Calling the decompression worker (deferred)
-	decWorker.bind(this, d, decWorker, callback).defer();
+	ImportSession.deferStep(session, decWorker.bind(this, d, decWorker, callback));
 	
 }

@@ -38,6 +38,13 @@ enyo.kind({
 					]},
 					{kind: "RowGroup", components: [
 						{kind: "HFlexBox", components: [
+							{content: $L("Apply chapter breaks"), flex: 1},
+							{kind: "ToggleButton", name: "chapterBreaksBtn", state: false, onChange: "saveChapterBreaksChange"},
+						]},
+						{content: $L("Page break between chapters. Off by default - can noticeably slow importing new books."), className: "loginFormDescription"},
+					]},
+					{kind: "RowGroup", components: [
+						{kind: "HFlexBox", components: [
 							{content: $L("Default theme"), flex: 1},
 							{kind: "ListSelector", name: "themeSelector", onChange: "saveThemeChange", items: [
 								{caption: $L("White"), value: 0},
@@ -69,7 +76,6 @@ enyo.kind({
 					{kind: "RowGroup", style: "margin-top: 20px;", components: [
 						{kind: "Button", content: $L("Clear Library"), className: "enyo-button-negative", onclick: "confirmClearLibrary"},
 					]},
-					{content: $L("AI"), className: "loginFormTitle", style: "margin-top: 20px; font-size: 16px;"},
 					{kind: "RowGroup", components: [
 						{kind: "HFlexBox", components: [
 							{content: $L("Enable AI Features"), flex: 1},
@@ -77,7 +83,6 @@ enyo.kind({
 						]},
 						{name: "aiDesc", content: "", className: "loginFormDescription"},
 					]},
-					{content: $L("Sync"), className: "loginFormTitle", style: "margin-top: 20px; font-size: 16px;"},
 					{kind: "RowGroup", components: [
 						{kind: "HFlexBox", components: [
 							{content: $L("Sync reading position"), flex: 1},
@@ -148,6 +153,7 @@ enyo.kind({
 			this.$.fontSelector.setValue(settings.currentFontType || 0);
 			this.$.fontSizeSelector.setValue(settings.currentFontSize || 18);
 			this.$.volumeKeysBtn.setState(settings.volumeKeyPageTurn || false);
+			this.$.chapterBreaksBtn.setState(settings.chapterPageBreaks === true);
 			this.$.keepScreenOnBtn.setState(settings.keepScreenOnReading || false);
 			this.$.aiFeaturesBtn.setState(settings.enableAIFeatures || false);
 			this.$.syncEnabledBtn.setState(settings.syncEnabled || false);
@@ -190,6 +196,10 @@ enyo.kind({
 
 	saveVolumeKeysChange: function() {
 		this.saveSettings("volumeKeyPageTurn", this.$.volumeKeysBtn.getState());
+	},
+
+	saveChapterBreaksChange: function() {
+		this.saveSettings("chapterPageBreaks", this.$.chapterBreaksBtn.getState());
 	},
 
 	saveKeepScreenOnChange: function() {

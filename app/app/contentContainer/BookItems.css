@@ -287,6 +287,14 @@
 .coverImageSmall {
 	margin: -8px 0 -5px 0;
 /*	margin: -3px 0 -18px 0;*/
+	/* Real covers are stored as 120x180 thumbnails (see FileImporter.js's
+	   scaleCoverImage) and render at that native size with no CSS
+	   constraint. The "no cover" placeholder (item-cover-default-small.png)
+	   is a much smaller asset (52x81), so without an explicit size here its
+	   row rendered roughly a third as tall as a book with real cover art.
+	   Pin both to the real cover's size so every row is a consistent height. */
+	width: 120px;
+	height: 180px;
 }
 
 .archivedBannerContainerSmall {
@@ -380,31 +388,34 @@
 	z-index: 4;
 }
 
-/* Grid container: wrapping flex row so books reflow automatically.
+/* Grid container: float-based wrapping row so books reflow automatically.
    Items have a fixed natural size (120px cover + 30px margins = 150px/slot)
    so gaps are constant regardless of container width.
-   Three display layers for broad compatibility:
-     1. -webkit-box  (WebKit 534 / webOS 3 TouchPad, Chrome ≤20)
-     2. -webkit-flex (WebKit 536, Chrome 21-28)
-     3. flex         (all modern browsers) */
+   NOT flexbox: webOS 3 TouchPad's WebKit (534) doesn't understand
+   `display: flex` / `-webkit-flex` at all and silently falls back to the
+   OLD `-webkit-box` model, which has no multi-line wrapping capability
+   whatsoever (`-webkit-box-lines: multiple` was never a real, shipped
+   property). Confirmed via getComputedStyle on-device: display resolved to
+   -webkit-box with flexWrap undefined, so every item sat in one
+   never-wrapping row - float is the one layout technique that has reliably
+   wrapped in every WebKit version, including this one. */
 .grid-container {
-	display: -webkit-box;
-	-webkit-box-orient: horizontal;
-	-webkit-box-lines: multiple;
-	display: -webkit-flex;
-	display: flex;
-	-webkit-flex-wrap: wrap;
-	flex-wrap: wrap;
-	-webkit-align-content: flex-start;
-	align-content: flex-start;
+	width: 100%;
+	box-sizing: border-box;
+	display: block;
+}
+/* Clearfix - floated .gridItem children don't contribute to this container's
+   height on their own. */
+.grid-container:after {
+	content: "";
+	display: table;
+	clear: both;
 }
 
 .gridItem {
+	float: left;
 	margin: 20px 15px 10px 15px;
 	position: relative;
-	-webkit-box-flex: 0;    /* old WebKit: don't grow */
-	-webkit-flex: 0 0 auto;
-	flex: 0 0 auto;
 }
 
 .bookExcerpt {

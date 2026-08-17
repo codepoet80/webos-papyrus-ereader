@@ -426,7 +426,7 @@ ZipLocalFile.prototype.uncompress = function() {
  * It will call the callback with the decompressed data.
  * @param {Object} callback
  */
-ZipLocalFile.prototype.uncompressAsync = function(callback) {
+ZipLocalFile.prototype.uncompressAsync = function(callback, session) {
 	if (!callback) {
 		//No sense in uncompressing when nobody wants the data
 		return;
@@ -443,7 +443,7 @@ ZipLocalFile.prototype.uncompressAsync = function(callback) {
             break;
         case 8: // DEFLATE compression
             var inflater = new Inflate();
-            inflater.uncompressAsync(this.data, false, callback);
+            inflater.uncompressAsync(this.data, false, callback, session);
             break;
         default: //No other compression method is supported
         	callback(null);

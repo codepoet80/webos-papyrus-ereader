@@ -1,6 +1,9 @@
 
 /** The size of each chunk in plain-text bytes. */
 HTMLBook.chunkSize = 16384;
+/** How far to hunt for the end of a runaway tag before giving up and
+ *  skipping a plain chunk instead. Only reached on malformed books. */
+HTMLBook.RUNAWAY_TAG_SCAN_MAX = 2097152;
 
 /**
  * Creates an HTML book from a reader, or simply loads it from an internal DB.
@@ -21,6 +24,11 @@ function HTMLBook(reader, readerIsPlainText, dbName, callback, progressCallback)
 	// Optional: called each time a chunk or image is processed, so the caller
 	// can reset a watchdog timer.  null = disabled.
 	this.progressCallback = progressCallback || null;
+
+	//The import that owns this book, or null when loading an already-imported
+	//book from the DB for reading.  Gates the deferred chain below so a
+	//cancelled import stops dead and a thrown step reports an error (F1/F2).
+	this.importSession = ImportSession.capture();
 
 	//Storing the current reader position for load progress
 	this.currLoadPos = 0;
@@ -60,6 +68,17 @@ HTMLBook.prototype.loadDefaults = function() {
 	//The file's fixed bookmarks, used for links
 	//See: LibraryEntry.js; Bookmark object
 	this.bookmarks = new Array();
+
+	//Byte offsets (in this book's continuous stream) where a new
+	//chapter/spine-item starts. PageFitter uses these to force a page
+	//break at each chapter boundary instead of flowing chapters together.
+	//Populated from the reader's own chapter offsets on import (see
+	//readFromReader's finish()) and persisted via save/decodeMetaData.
+	this.chapterBreaks = new Array();
+
+	//Buffers queued for a batched write during import (see saveBufferData).
+	this._pendingWrites = new Array();
+	this._pendingBytes = 0;
 
 	//Checking if the reader is capable of reading imgs
 	if (this.reader != null && this.reader.getImage) {
@@ -133,6 +152,9 @@ HTMLBook.prototype.dbOpenLoad = function(data) {
 	this.numBuffers = meta.numBuffers;
 	this.bufferOffsets = meta.bufferOffsets;
 	this.bookmarks = meta.bookmarks;
+	//Absent in books imported before chapter-break metadata existed -
+	//falls back to no forced page breaks, matching their original import.
+	this.chapterBreaks = meta.chapterBreaks || [];
 
 	enyo.log("HTMLBook.dbOpenLoad: SUCCESS - length=" + this.length + ", numBuffers=" + this.numBuffers + ", bufferOffsets.length=" + this.bufferOffsets.length + ", bookmarks=" + this.bookmarks.length);
 
@@ -164,6 +186,9 @@ HTMLBook.prototype.dbOpenFail = function() {
 HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall) {
 	//console.log("readFromReader");
 
+	// P0 instrumentation: one count per chunk cycle (see IMPORT-REWORK-PLAN.md).
+	if (typeof window !== "undefined" && window.ImportStats) { window.ImportStats.count("chunks", 1); }
+
 	// Signal progress on every chunk so the watchdog resets and the spinner
 	// shows a percentage.  The DOM update is throttled in keepAlive so the
 	// browser can repaint between updates.
@@ -188,6 +213,24 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 		this.storedImageCount = 0;
 		this.lastImportProgressPct = -1;
 		this.lastImportProgressTime = 0;
+		//Chapter boundaries in PLAIN-TEXT space (tags stripped) - the same
+		//coordinate system this.length uses (see HTMLBuffer.getLength()).
+		//Built up incrementally below as import naturally crosses each
+		//chapter's raw-byte end.
+		this.chapterBreaks = [0];
+		//Gated by the "Apply chapter breaks" preference, default OFF.
+		//Confirmed via repeated on-device A/B testing: with this enabled, a
+		//~470KB novel's import goes from ~90s to 10-20+ minutes on a
+		//TouchPad. The exact mechanism was never pinned down - it is NOT
+		//simply "more read/write cycles" (a Node.js harness against the
+		//same book showed only ~1.3x more of those, nowhere near enough to
+		//explain the real-device gap) - so don't re-enable this by default
+		//without a confirmed root cause and a real on-device timing re-test.
+		this.chapterBreaksImportEnabled = false;
+		try {
+			var _importSettings = JSON.parse(localStorage.getItem("ereader_settings") || "{}");
+			this.chapterBreaksImportEnabled = _importSettings.chapterPageBreaks === true;
+		} catch (e) {}
 	}
 
 	//Saving the current loading position
@@ -196,23 +239,61 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 	//What to do after the last chunk has been read and all buffers flushed
 	var finish = function(){
 		//console.log("Calling finish.");
-		//We have finished loading from the reader. Invalidating it
+		//this.chapterBreaks was already built incrementally as chunks were
+		//read (see below) - nothing to do here but discard the reader.
 		this.reader = null;
 		//We signify that we're ready
 		this.isReady = true;
 
-		//We save our own metadata
-		this.saveMetaData();
+		//Flush any batched buffer writes BEFORE the metadata record. The
+		//metadata is what makes a book openable, so it must be the last
+		//thing written - a book whose content write was interrupted then
+		//simply fails to open, instead of opening and rendering garbage.
+		var self = this;
+		this.flushPendingWrites(function() {
+			self.saveMetaData();
 
-		//console.log("The book has a length of: " + this.getLength());
+			//console.log("The book has a length of: " + self.getLength());
 
-		//And we call our callback
-		this.callback(this);
+			//And we call our callback
+			self.callback(self);
+		});
 	}.bind(this);
 
 	//console.log("Reading chunk for pos " + currPos);
+	//Land this read exactly on a chapter boundary (raw markup-byte space -
+	//see reader.offsets) WHEN one falls within normal chunkSize reach, so
+	//we can detect a clean crossing below without any extra parsing pass.
+	//Reads still take the FURTHEST reachable boundary, not the nearest one:
+	//several small chapters (a cover page, a title page, a two-line "part"
+	//divider, ...) get batched into one read+DB-write exactly as before,
+	//instead of each paying its own full read/parse/write round-trip -
+	//that per-chapter fragmentation was a real, measured import slowdown
+	//(see fix #19's import-pipeline performance warning). Only the
+	//boundary at the END of each read's batch is captured precisely; any
+	//boundary swallowed mid-batch (only possible between very small,
+	//already-adjacent chapters) doesn't get its own forced page break, a
+	//low-cost trade next to the fragmentation cost of always breaking here.
+	//A chunk that lands inside one large chapter (the common case) is
+	//completely unaffected - no boundary is reachable, so it just gets the
+	//normal chunkSize as before.
+	var reqLen = HTMLBook.chunkSize;
+	var chapterBoundaryReached = -1;
+	if (this.chapterBreaksImportEnabled && this.reader && this.reader.offsets && this.reader.offsets.length > 0) {
+		var maxReach = currPos + HTMLBook.chunkSize;
+		for (var ci = 0; ci < this.reader.offsets.length; ci++) {
+			var boundary = this.reader.offsets[ci].start;
+			if (boundary <= currPos) continue;
+			if (boundary > maxReach) break; //offsets are sorted ascending
+			chapterBoundaryReached = boundary; //keep the furthest reachable one
+		}
+		if (chapterBoundaryReached > 0) {
+			reqLen = Math.max(1, chapterBoundaryReached - currPos);
+		}
+	}
+
 	//Trying to read another chunk
-	var byteBuf = this.reader.read(currPos, HTMLBook.chunkSize);
+	var byteBuf = this.reader.read(currPos, reqLen);
 	if (byteBuf == null || byteBuf.length <= 0) {
 		finish();
 		return;
@@ -225,13 +306,49 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 	var dropped = buffer.addBytes(byteBuf, this.readerIsPlainText);
 
 	//Checking if the document ends malformed on an open tag
+	var reachedChapterEnd = false;
 	if (byteBuf.length - dropped <= 0) {
-		//There is nothing to do anymore, since the end's malformed
-		finish();
+		// Nothing in this chunk parsed. That means a SINGLE tag is longer than
+		// the whole chunk - in practice a big inline data: URI. This used to be
+		// treated as "the document ends malformed here" and finish() silently
+		// discarded the entire rest of the book: the import reported success
+		// and the reader simply never saw the remaining chapters (audit F8).
+		// Only finish when genuinely at the end; otherwise step over the
+		// oversized tag and keep going.
+		var streamLen = (this.reader.getLength) ? this.reader.getLength() : 0;
+		if (currPos + byteBuf.length >= streamLen) {
+			finish();
+			return;
+		}
+		// Find where the runaway tag actually closes so we skip the tag rather
+		// than a fixed window - otherwise its tail would land in the next chunk
+		// and be rendered to the reader as raw base64 text.
+		var skipTo = -1, scanned = 0, probe, pi;
+		while (scanned < HTMLBook.RUNAWAY_TAG_SCAN_MAX) {
+			probe = this.reader.read(currPos + scanned, HTMLBook.chunkSize);
+			if (!probe || probe.length <= 0) { break; }
+			for (pi = 0; pi < probe.length; pi++) {
+				if (probe[pi] === 0x3E) { skipTo = currPos + scanned + pi + 1; break; }
+			}
+			if (skipTo >= 0) { break; }
+			scanned += probe.length;
+		}
+		if (skipTo < 0) { skipTo = currPos + byteBuf.length; }
+		enyo.error("HTMLBook: tag larger than one chunk at " + currPos +
+			"; skipping " + (skipTo - currPos) + " bytes to keep the rest of the book");
+		// Open tags are unreliable across a skipped span; reset rather than
+		// carry state that no longer matches the stream.
+		ImportSession.deferStep(this.importSession,
+			this.readFromReader.bind(this, skipTo, null, true));
 		return;
 	} else {
 		//Moving forward in the stream, but fetching the dropped chars again
-		currPos += byteBuf.length - dropped;		
+		currPos += byteBuf.length - dropped;
+		//A clean landing exactly on chapterBoundaryReached (no dropped
+		//trailing bytes) means this chunk's plain-text length, once added
+		//to this.length below, is exactly the next chapter's start position.
+		reachedChapterEnd = (chapterBoundaryReached > 0 && currPos === chapterBoundaryReached &&
+			chapterBoundaryReached < this.reader.getLength());
 	}
 	
 	//The function that processes the tags of the buffer
@@ -301,7 +418,14 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 					//Now, we try to fetch the img data from the buffer
 					var bytes = this.reader.getImage(label);
 					if (bytes == null || bytes.length <= 0) {
-						enyo.warn("Image data invalid/empty.");
+						// Negative-cache the miss. Some books ship broken/zero-byte
+						// images (Cognition in the Wild has 36, referenced 395 times
+						// between them). Without this, EVERY reference repeats the
+						// linear getImage() scan, the warn, and - because
+						// breakForWebOS stays true - a full ~10ms defer. See audit F13.
+						enyo.warn("Image data invalid/empty: " + label);
+						this.imgNameBuffer.push(label);
+						breakForWebOS = false;
 						break;
 					}
 					// On webOS, btoa() is O(n²) for large byte arrays — skip images above
@@ -344,26 +468,30 @@ HTMLBook.prototype.readFromReader = function(currPos, openTags, isRecursiveCall)
 		}
 		
 		//At the end, we call ourselves deferred for the next tag
-		self.bind(this, buffer, pos+1, self, callback).defer();
+		ImportSession.deferStep(this.importSession, self.bind(this, buffer, pos+1, self, callback));
 	}
 	
-	var storeWorker = function(buffer, currPos, openTags) {
+	var storeWorker = function(buffer, currPos, openTags, reachedChapterEnd) {
 		openTags = buffer.getOpenTagsEnd();
 
 		this.bufferOffsets[this.numBuffers] = this.length;
 		this.length += buffer.getLength();
 		this.numBuffers += 1;
 
+		if (reachedChapterEnd) {
+			this.chapterBreaks.push(this.length);
+		}
+
 		this.saveBufferData(this.numBuffers - 1, buffer,
 			this.readFromReader.bind(this, currPos, openTags, true)
 		);
 	}
-	
+
 	//We call the tagWorker, which calls the storeWorker, which calls
 	//this function again. Isn't Javascript fun?
-	tagWorker.bind(this, buffer, 0, tagWorker,
-		storeWorker.bind(this, buffer, currPos, openTags)
-	).defer();
+	ImportSession.deferStep(this.importSession, tagWorker.bind(this, buffer, 0, tagWorker,
+		storeWorker.bind(this, buffer, currPos, openTags, reachedChapterEnd)
+	));
 }
 
 HTMLBook.prototype.getLength = function() {
@@ -586,6 +714,11 @@ HTMLBook.prototype.saveMetaData = function() {
 		meta += escape(this.bookmarks[i].label) + ";";
 		meta += this.bookmarks[i].position + ";";
 	}
+	//Saving the chapterBreaks array
+	meta += this.chapterBreaks.length + ";";
+	for (var i = 0; i < this.chapterBreaks.length; i+=1) {
+		meta += this.chapterBreaks[i] + ";";
+	}
 	//We don't care whether it's successful or not
 	this.bookDB.write("meta", meta, function(){});
 }
@@ -621,10 +754,47 @@ HTMLBook.prototype.decodeMetaData = function(data) {
 			var label = unescape(fields[i]);
 			var pos = parseInt(fields[i+1]);
 			meta.bookmarks.push(new Bookmark(label, pos));
-		}		
+		}
 	}
-	
+
+	//Decoding the chapterBreaks array. Absent in books saved before this
+	//field existed - dbOpenLoad falls back to [] in that case.
+	if (i >= fields.length) { return meta; }
+	var end = i + parseInt(fields[i]); i++;
+	meta.chapterBreaks = new Array();
+	if (end < fields.length) {
+		for (; i <= end; i += 1) {
+			meta.chapterBreaks.push(parseInt(fields[i]));
+		}
+	}
+
 	return meta;
+}
+
+/**
+ * Returns the byte offset where the chapter containing 'pos' ends (i.e.
+ * the start of the next chapter), or this book's total length if 'pos'
+ * is in the last chapter / no chapter boundaries are known.
+ */
+HTMLBook.prototype.getChapterEnd = function(pos) {
+	var breaks = this.chapterBreaks;
+	for (var i = 0; breaks && i < breaks.length; i += 1) {
+		if (breaks[i] > pos) { return breaks[i]; }
+	}
+	return this.length;
+}
+
+/**
+ * Returns the byte offset where the chapter containing 'pos' starts,
+ * or 0 if 'pos' is in the first chapter / no chapter boundaries are known.
+ */
+HTMLBook.prototype.getChapterStart = function(pos) {
+	var breaks = this.chapterBreaks;
+	var result = 0;
+	for (var i = 0; breaks && i < breaks.length; i += 1) {
+		if (breaks[i] <= pos) { result = breaks[i]; } else { break; }
+	}
+	return result;
 }
 
 /**
@@ -632,15 +802,57 @@ HTMLBook.prototype.decodeMetaData = function(data) {
  * @param {Object} bufferNum the number in the database that will be assigned.
  * @param {Object} buffer the HTMLBuffer that should be stored.
  */
+/** Max buffers held before a batch flush. Bounds both transaction count
+ *  and how much encoded text we keep in memory at once. */
+HTMLBook.WRITE_BATCH_COUNT = 8;
+/** Max encoded bytes held before a batch flush, so books with very large
+ *  chunks do not balloon memory while waiting to reach the count. */
+HTMLBook.WRITE_BATCH_BYTES = 262144;
+
 HTMLBook.prototype.saveBufferData = function(bufferNum, buffer, callback) {
 	//console.log("Saving Buffer Data for " + bufferNum);
 	var name = "t" + bufferNum;
 	var save = buffer.getSaveState();
+
+	// During an IMPORT, batch buffer writes into one transaction per group.
+	// Each WebSQL transaction is a disk flush on webOS, and a book produces
+	// one per chunk - the dominant cost of the storage phase. Reading a book
+	// (no import session) keeps the original write-through path untouched,
+	// since loadBufferData must be able to read anything already saved.
+	if (this.importSession && !this.importSession.cancelled) {
+		this._pendingWrites.push({ name: name, value: save });
+		this._pendingBytes += save.length;
+		if (this._pendingWrites.length >= HTMLBook.WRITE_BATCH_COUNT ||
+			this._pendingBytes >= HTMLBook.WRITE_BATCH_BYTES) {
+			this.flushPendingWrites(callback);
+		} else if (callback) {
+			callback(true);
+		}
+	return;
+	}
+
 	if (typeof(callback) != "undefined" && callback != null) {
 		this.bookDB.write(name, save, callback);
 	} else {
 		this.bookDB.write(name, save);
 	}
+}
+
+/**
+ * Writes any buffers queued by saveBufferData in a single transaction.
+ * Always invokes the callback, even when there is nothing to flush.
+ */
+HTMLBook.prototype.flushPendingWrites = function(callback) {
+	var batch = this._pendingWrites;
+	this._pendingWrites = [];
+	this._pendingBytes = 0;
+	if (!batch.length) {
+		if (callback) { callback(true); }
+		return;
+	}
+	this.bookDB.writeBatch(batch, function(ok) {
+		if (callback) { callback(ok); }
+	});
 }
 
 /**

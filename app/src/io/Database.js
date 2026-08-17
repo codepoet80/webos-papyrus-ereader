@@ -140,6 +140,7 @@ Database.prototype.read = function(name, callback) {
 
 Database.prototype.write = function(name, value, callback) {
 	if (!callback) callback = function() {};
+	if (typeof window !== "undefined" && window.ImportStats) { window.ImportStats.count("dbWrites", 1); }
 	//console.log("write");
 	//We check if the db object's ready
 	if (this.isReady == false) {
@@ -178,6 +179,7 @@ Database.prototype.write = function(name, value, callback) {
  */
 Database.prototype.writeBatch = function(pairs, callback) {
 	if (!callback) callback = function() {};
+	if (typeof window !== "undefined" && window.ImportStats) { window.ImportStats.count("dbWrites", 1); }
 	if (!pairs || pairs.length === 0) { callback(true); return; }
 	if (this.isReady === false) { callback(false); return; }
 
