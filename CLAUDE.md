@@ -73,6 +73,7 @@ The app is fully functional and ready for community testing.
 │   │   └── ...
 │   └── appinfo.json
 ├── tools/                                   # Import regression suite (run-tests.sh)
+├── dictionary.php                            # Dictionary proxy (deployed to papyrus.wosa.link)
 ├── IMPORT-AUDIT.html                        # Import pipeline findings F1-F16
 ├── IMPORT-REWORK-PLAN.md                    # Phased implementation spec + status
 ├── com.palm.app.kindle_0.12.50_all/         # Original Kindle (reference)
@@ -278,6 +279,8 @@ Server + protocol docs: `webos-catalog-service` CLAUDE.md (endpoints
 | `app/Main.js` | App controller, library management, settings, About dialog |
 | `app/common/EpubRenderer.js` | Core rendering - wraps PageFitter with Enyo events |
 | `app/common/FileImporter.js` | ePub import, parsing, library persistence, pre-flight, DB hygiene, IMPORTSTATS |
+| `app/common/Dictionary.js` | Define-mode look-up client — calls our proxy, not a third-party API (fix #34) |
+| `dictionary.php` | Dictionary proxy (repo root → papyrus.wosa.link). Datamuse → Wiktionary, disk cache, stale-on-error |
 | `app/common/ImportSession.js` | Import single-flight lock, cancellation token, step trampoline |
 | `src/io/Bytes.js` | Byte primitives. `concatArray` is the engine hot path — append ascending only (fix #33) |
 | `tools/run-tests.sh` | Import regression suite — run after any import-path change |
@@ -666,9 +669,9 @@ The `.ipk` grew to ~7MB partly because `enyo/build/g11n/` contained 2.7MB of loc
 
 ### 28. Dictionary Look-up (Define mode) — Word Hit-Testing and webOS Font Caveats
 
-Tap a word in the reader to look up its definition. Entered from a **"Define..."** item in the book menu (`BookInfoPopup.js`); the next page tap resolves to a word, is looked up against dictionaryapi.dev, and is shown in a themed centered card. Mode auto-exits after one lookup (even on failure) or can be toggled off from the menu.
+Tap a word in the reader to look up its definition. Entered from a **"Define..."** item in the book menu (`BookInfoPopup.js`); the next page tap resolves to a word, is looked up through our own dictionary proxy (see fix #34 — the original dictionaryapi.dev backend died), and is shown in a themed centered card. Mode auto-exits after one lookup (even on failure) or can be toggled off from the menu.
 
-**Files:** `app/common/Dictionary.js` (new — `PapyrusDictionary.lookup`), `app/reading/DefinitionPopup.js`/`.css` (new — the card), plus `EpubRenderer.js` (word hit-test), `body.js` (pass-throughs), `BookInfoPopup.js` + `bottom_row.js` (menu item + checkmark), `BookReader.js` (Define-mode state + tap intercept), `common.css` (highlight), `depends.js`.
+**Files:** `app/common/Dictionary.js` (new — `PapyrusDictionary.lookup`; see fix #34 for the current backend), `app/reading/DefinitionPopup.js`/`.css` (new — the card), plus `EpubRenderer.js` (word hit-test), `body.js` (pass-throughs), `BookInfoPopup.js` + `bottom_row.js` (menu item + checkmark), `BookReader.js` (Define-mode state + tap intercept), `common.css` (highlight), `depends.js`.
 
 **Word hit-testing is geometric, NOT `caretRangeFromPoint` (`EpubRenderer.getWordAt`).** The caret API was tried first (both `caretRangeFromPoint` and a `Selection.modify` word-snap) and returned nothing usable on the target platform — every tap resolved outside the page container, almost certainly because an overlay intercepts the caret hit-test. The working implementation (`_charAt`) walks the page container's own text nodes via a `TreeWalker` and uses per-character `Range.getBoundingClientRect()` to find the glyph under the tap (nearest glyph on the line if the tap lands in a gap), then `_expandWord` grows to word boundaries. Because it only ever inspects text INSIDE `.epub-page-container`, no overlay can throw it off, and it behaves identically on webOS old WebKit and modern browsers. **Do not "simplify" this back to `caretRangeFromPoint`.** `getLastWordFailReason()` surfaces a short reason (shown in the banner) for diagnosing misses without device logs.
 
@@ -810,6 +813,50 @@ A `PREFLIGHT` line precedes it with chapter/text/image counts.
 
 **It still cannot measure webOS speed** (fix #19's warning stands): old JavaScriptCore has very different per-operation costs from V8. Use the `timers` and `writes` columns as the portable proxies, then confirm wall-clock on device with the `IMPORTSTATS` line. Full analysis in `IMPORT-AUDIT.html`; phased implementation spec and status in `IMPORT-REWORK-PLAN.md`.
 
+
+### 34. Dictionary Look-up Broke — dictionaryapi.dev's Origin Died; Now Proxied (`dictionary.php`, `Dictionary.js`)
+
+**Problem:** Define mode stopped returning definitions. It looked intermittent — common words worked, most words hung and then reported "Couldn't reach the dictionary."
+
+**Root cause — entirely upstream, nothing wrong with our code.** `api.dictionaryapi.dev`'s origin server stopped answering. Cloudflare kept serving whatever was already in its edge cache and timed out on everything else:
+
+| request | result |
+|---|---|
+| `cat`, `glass`, `water`, `quixotic` | 200 in ~70ms, `cf-cache-status: HIT` |
+| `thither`, `perambulate`, `xyzzy` | timeout → status 0 |
+| `OPTIONS` (any word) | 522 (Cloudflare "origin unreachable") |
+
+The proof is the `age` header on the successes: **up to 30 days** against the response's own `max-age=14400` (4 hours). Cloudflare was serving stale-on-error because it had not reached the origin in weeks. `hello` returned 200 on one test and timed out three minutes later — an entry aging out in real time. As the cache drains, everything fails.
+
+**Ruled out** (each was checked, so don't re-chase them): TLS is fine — dictionaryapi.dev offers TLS 1.2 with the same Google Trust Services ECDSA chain as `appcatalog.webosarchive.org`, which account sync already talks to from a TouchPad. CORS on GET is `*`. `Dictionary.js` was behaving correctly; status 0 → one retry → "Couldn't reach the dictionary" is the right response to a dead origin.
+
+**Fix — `dictionary.php` in the repo root**, deployed to `http://papyrus.wosa.link/dictionary.php`. `GET ?w=<word>` returns a **dictionaryapi.dev-shaped payload**, which is the point: `DefinitionPopup.js` needed no changes at all, and `Dictionary.js` only changed its URL. Sources, in order:
+
+1. **Datamuse** (`api.datamuse.com/words?sp=W&md=d`) — WordNet glosses, plain text, tiny payloads.
+2. **Wiktionary REST** — broader coverage; its HTML is stripped server-side so the device never parses markup.
+
+Both were checked against the literary vocabulary that actually turns up in old books (whilom, bedizened, susurrus, ere, hast, gainsay, yclept) — Datamuse covered every one. Neither needs an API key.
+
+**Why a proxy rather than just swapping the URL:** this is the second free API to die under this app (see the `accuweatherxml-proxy` project). webOS devices cannot be counted on to ever be updated again. When the next provider dies, that one server-side file changes and every installed copy keeps working.
+
+**`http` on webOS is deliberate**, at the maintainer's direction: TouchPads never patched for modern TLS can still reach it, and definitions are public, non-personal data. On PWA/desktop `Dictionary._baseUrl()` uses the page's own scheme instead — the PWA is served from this same host, so the request stays same-origin, and an `http://` call from an `https://` page would be blocked as mixed content.
+
+**Do NOT emit CORS headers from `dictionary.php`.** nginx on papyrus.wosa.link already sends `Access-Control-Allow-Origin: *` for this host; a second one from PHP produces a duplicate header, and browsers reject a CORS response carrying two ACAO values — which fails in a way that looks exactly like a network error. There is a `$SEND_CORS_HEADERS` flag (default `false`) for deploying somewhere without server-level CORS.
+
+**Two real word-normalization bugs fixed in the same pass** (both pre-existing, both silently returned the *wrong* word rather than failing):
+- **Accents were stripped.** The old `[^a-z0-9'\-]` whitelist turned `naïve` into `nave` — the body of a church. Both upstreams handle accented words natively, so both ends now use a blacklist, matching the `[A-Za-z0-9À-ɏ'\-]` class `EpubRenderer._expandWord` already uses to find the word.
+- **Typographic apostrophes missed.** ePubs typeset apostrophes as U+2019, and Datamuse indexes only the ASCII form: `o'clock` hits, `o’clock` misses entirely, and `don’t` quietly matched the unrelated entry for `dont`. Both ends now fold U+2018/2019/02BC/2032 to `'` and U+2010/2011 to `-`.
+
+**Caching:** definitions are immutable, so hits are cached on disk for 30 days (misses 7, so a transient upstream failure doesn't stick). If every upstream is unreachable the proxy serves a **stale** entry rather than an error — the one thing dictionaryapi.dev's CDN got right. A read-only or missing `cache/` directory is not fatal; it just stops caching. `cache/` is gitignored.
+
+**Verified** against live upstreams via `php:8.3-cli` (no PHP on the dev Mac — used podman): Datamuse path, Wiktionary fallback with HTML stripping, 404, 502 when all upstreams are dead, stale-serve, `OPTIONS` → 204, and rejection of empty/overlong/traversal/injection input. The real `Dictionary.js` was then driven end-to-end through an XHR shim, including tapped words that arrive with surrounding punctuation (`"Thither."`, `"“Beautiful,”"`).
+
+**Deploy:** `dictionary.php` must reach the webserver, and the app needs a `build.sh` bump + PWA redeploy (watch for a stale service worker, fix #15). Server-side sanity check:
+```bash
+curl "http://papyrus.wosa.link/dictionary.php?w=hello"      # 200, source=datamuse
+curl -i "http://papyrus.wosa.link/dictionary.php?w=zzzqq"   # 404
+```
+
 ---
 
 ## Implementation Status
@@ -847,6 +894,7 @@ A `PREFLIGHT` line precedes it with chapter/text/image counts.
 - [x] Oversized image skip: ePubs with large covers (>1MB) now import in normal time on webOS
 - [x] Enyo package size: removed unused g11n locale data (phone/address/name) and test images (~2.6MB savings)
 - [x] Dictionary look-up (Define mode): tap a word to define it (geometric hit-test, tapped-word highlight, webOS font caveats handled)
+- [x] Dictionary proxy (`dictionary.php`): survives the death of any one provider; fixed accented words and typographic apostrophes silently defining the wrong word
 - [x] Import pipeline rework (v1.6.0): quadratic `concatArray` fixed, imports cancellable, errors surfaced, silent truncation fixed, orphaned DBs reclaimed, ~18-40x fewer scheduler round-trips
 - [x] Import regression suite (`tools/run-tests.sh`) — real books, generated pathological books, cancellation/error assertions
 - [x] Chapter breaks: start each chapter on a new page (on by default; boundaries always recorded at import, preference controls display)

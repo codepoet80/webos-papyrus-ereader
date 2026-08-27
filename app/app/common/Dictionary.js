@@ -1,9 +1,19 @@
 /**
  * PapyrusDictionary - online dictionary look-up helper
  *
- * Looks a single word up against the free, CORS-enabled Dictionary API
- * (https://dictionaryapi.dev).  No API key is required.  The response is an
- * array of entries; we hand the first entry back to the caller.
+ * Looks a single word up through our own proxy at papyrus.wosa.link.  The
+ * response is an array of entries; we hand the first entry back to the caller.
+ *
+ * Why a proxy?  This used to call https://api.dictionaryapi.dev directly.  In
+ * August 2026 that service's origin server stopped answering — Cloudflare kept
+ * serving stale cached entries while every uncached word timed out, so common
+ * words appeared to work and everything else hung.  A free API dying under a
+ * legacy client is not a one-off (the same thing happened to AccuWeather's XML
+ * API), and webOS devices cannot be counted on to ever be updated again.  So
+ * lookups go through dictionary.php in this repo, which queries Datamuse, falls
+ * back to Wiktionary, caches on disk, and emits this same response shape.  When
+ * the next provider dies, that one server-side file changes and installed copies
+ * of Papyrus keep working untouched.
  *
  * Follows the same raw-XMLHttpRequest idiom as SyncManager.js (no fetch / no
  * Promises — those are unavailable on webOS old WebKit).  webOS native apps
@@ -19,14 +29,40 @@
  */
 var PapyrusDictionary = {
 
-	API_BASE: "https://api.dictionaryapi.dev/api/v2/entries/en/",
+	API_HOST: "papyrus.wosa.link/dictionary.php",
+
+	// webOS deliberately uses plain http: TouchPads that were never patched for
+	// modern TLS can still reach it, and definitions are public, non-personal
+	// data — there is nothing here worth protecting in transit.  Elsewhere we
+	// match the page's own scheme: the PWA is served from this same host, so
+	// that keeps the request same-origin, and an http:// call from an https://
+	// page would be blocked outright as mixed content.
+	_baseUrl: function() {
+		if (typeof window !== "undefined" && window.PalmSystem) {
+			return "http://" + this.API_HOST;
+		}
+		var proto = (typeof location !== "undefined" && location.protocol === "http:")
+			? "http:" : "https:";
+		return proto + "//" + this.API_HOST;
+	},
 
 	lookup: function(word, callback) {
 		if (!word) {
 			callback("notfound", null);
 			return;
 		}
-		var clean = String(word).toLowerCase().replace(/[^a-z0-9'\-]/gi, "");
+		var clean = String(word)
+			// ePubs typeset apostrophes as U+2019, not ASCII "'".  The proxy folds
+			// these too, but doing it here as well keeps the cache key identical
+			// whichever form the book used.
+			.replace(/[‘’ʼ′]/g, "'")
+			.replace(/[‐‑]/g, "-")
+			.toLowerCase()
+			// Blacklist, not whitelist.  An [a-z] whitelist strips accents and
+			// silently turns one word into a DIFFERENT one — "naïve" became
+			// "nave", the body of a church.  This is the same character class
+			// EpubRenderer._expandWord already uses to find the word.
+			.replace(/[^A-Za-z0-9À-ɏ'\-]/g, "");
 		if (!clean) {
 			callback("notfound", null);
 			return;
@@ -36,7 +72,7 @@ var PapyrusDictionary = {
 
 	_doGet: function(word, isRetry, callback) {
 		var self = this;
-		var url = this.API_BASE + encodeURIComponent(word);
+		var url = this._baseUrl() + "?w=" + encodeURIComponent(word);
 		var xhr = new XMLHttpRequest();
 		xhr.open('GET', url, true);
 		// See SyncManager._doPut for why Origin: null (webOS file:// origin).
