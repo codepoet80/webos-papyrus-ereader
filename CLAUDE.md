@@ -839,6 +839,38 @@ Both were checked against the literary vocabulary that actually turns up in old 
 
 **Why a proxy rather than just swapping the URL:** this is the second free API to die under this app (see the `accuweatherxml-proxy` project). webOS devices cannot be counted on to ever be updated again. When the next provider dies, that one server-side file changes and every installed copy keeps working.
 
+**Swapping in a new provider (the whole point of the design).** If just *one* source
+dies you may not have to do anything — the chain already falls through, and you'd
+simply see `"source":"wiktionary"` in the responses. To add or replace one, write a
+fetcher with the same signature and add a block to the "Upstreams" section:
+
+```php
+function fetch_whatever($word, $timeout, $userAgent) {
+    // map the response into meanings[] -> {partOfSpeech, definitions[] -> {definition, example}}
+    return array('reached' => true, 'entry' => make_entry($word, $meanings, 'whatever'));
+}
+```
+
+`make_entry()` already emits the dictionaryapi.dev shape, so mapping the new source's
+response is the only real work. Nothing else changes: no app edit, no `.ipk`, no PWA
+redeploy, and installed webOS devices never notice.
+
+**Keep `reached` and `entry` honest — this is the subtle one.** `reached => false`
+means *could not connect*; `reached => true, entry => null` means *connected fine,
+no such word*. A fetcher that reports `reached => true` for a dead upstream makes the
+proxy return 404 "No definition found" instead of serving the stale cache — losing the
+stale-serve safety net at exactly the moment it matters. Only `reached => false` on
+every source triggers the stale/502 path.
+
+After a swap, `rm -rf cache/dictionary` so you aren't serving up to 30 days of the old
+provider's definitions. It rebuilds on demand.
+
+**The proxy will not tell you a provider is dying.** It handles it per-word, but the
+failure signature we hit (some words instant, others timing out) is only visible if
+someone looks. For early warning instead of a user report, hit a deliberately obscure
+word on a cron and alert on non-200 — a common word may still be cached upstream and
+look healthy while everything else is broken.
+
 **`http` on webOS is deliberate**, at the maintainer's direction: TouchPads never patched for modern TLS can still reach it, and definitions are public, non-personal data. On PWA/desktop `Dictionary._baseUrl()` uses the page's own scheme instead — the PWA is served from this same host, so the request stays same-origin, and an `http://` call from an `https://` page would be blocked as mixed content.
 
 **Do NOT emit CORS headers from `dictionary.php`.** nginx on papyrus.wosa.link already sends `Access-Control-Allow-Origin: *` for this host; a second one from PHP produces a duplicate header, and browsers reject a CORS response carrying two ACAO values — which fails in a way that looks exactly like a network error. There is a `$SEND_CORS_HEADERS` flag (default `false`) for deploying somewhere without server-level CORS.
