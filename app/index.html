@@ -54,8 +54,10 @@
 		}
 	};
 
-	// Service worker registration
-	if ('serviceWorker' in navigator) {
+	// Service worker registration. Skipped in the Android (Cordova) build: the
+	// app is already local there, and a SW cache would only serve stale code
+	// across APK upgrades (see fix #15). build.sh injects cordova.js for Android.
+	if ('serviceWorker' in navigator && !window.cordova) {
 		window.addEventListener('load', function() {
 			navigator.serviceWorker.register('serviceworker.js', { updateViaCache: 'none' }).then(function(reg) {
 				console.log('Papyrus: service worker registered, scope=' + reg.scope);

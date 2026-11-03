@@ -6,3 +6,6 @@ node_modules/
 package-lock.json
 package.json
 cache/
+# Cordova wrapper keeps its package.json in git (pins cordova/cordova-android)
+!cordova-wrapper/package.json
+bin/

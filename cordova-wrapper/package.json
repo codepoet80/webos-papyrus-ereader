@@ -1,0 +1,17 @@
+{
+  "name": "org.webosarchive.papyrus",
+  "displayName": "Papyrus",
+  "version": "1.6.1",
+  "description": "Papyrus eReader for Android (Cordova wrapper around app/)",
+  "private": true,
+  "license": "BSD-3-Clause",
+  "devDependencies": {
+    "cordova": "^13.0.0",
+    "cordova-android": "^14.0.1"
+  },
+  "cordova": {
+    "platforms": [
+      "android"
+    ]
+  }
+}

@@ -109,7 +109,14 @@ printf 'initctl restart LunaSysMgr\nexit\n' | novacom open tty://
 
 # Manual package (skips build number bump)
 palm-package app
+
+# Android (Cordova wrapper in cordova-wrapper/; output in bin/)
+./build.sh android            # debug APK; `./build.sh all` = webOS + Android, one bump
+adb install -r bin/papyrus-*-debug.apk
+# Debug the WebView: chrome://inspect/#devices while the app is running
 ```
+
+Android notes: `build.sh android` switches to JDK 17 (sdkman `17.0.13-tem`), copies `app/` → `cordova-wrapper/www/` (drops `serviceworker.js`, injects `cordova.js` before Enyo), sets `versionCode` = build number. App id is `org.webosarchive.papyrus`. `config.xml` deliberately has **no** `allow-navigation` entries so `window.open`/`mailto:` go to the system browser/mail app instead of replacing the app in the WebView. Delete `cordova-wrapper/platforms/` to reset the platform after config/plugin changes.
 
 `build.sh` increments the build number in `app/serviceworker.js` (CACHE_NAME) and `app/app/Main.js` (About dialog string) in lockstep, then runs `palm-package app`.
 
