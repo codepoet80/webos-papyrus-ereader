@@ -153,6 +153,14 @@ enyo.kind({
 		// Set up global reference
 		window.EReaderApp = this;
 
+		// Android (Cordova) hardware back button. Listening for "backbutton"
+		// replaces Android's default (exit), so the library case exits explicitly.
+		if (window.cordova) {
+			document.addEventListener("deviceready", enyo.bind(this, function() {
+				document.addEventListener("backbutton", enyo.bind(this, "handleAndroidBack"), false);
+			}), false);
+		}
+
 		// Load saved settings
 		this.loadSettings();
 
@@ -467,6 +475,18 @@ enyo.kind({
 
 		// Apply the user's screen timeout preference while reading
 		this.disableDim();
+	},
+
+	// Back while reading closes the book, exactly like the toolbar's library
+	// button (BookReader.handleLibrarySelected saves position, stops volume
+	// keys, closes popups, then fires onLibrarySelected -> handleLibrarySelection).
+	// Back from the library leaves the app, as Android users expect.
+	handleAndroidBack: function() {
+		if (this.$.mainPane.getViewName() === "reader") {
+			this.$.reader.handleLibrarySelected();
+		} else if (navigator.app && navigator.app.exitApp) {
+			navigator.app.exitApp();
+		}
 	},
 
 	handleLibrarySelection: function() {
@@ -1324,7 +1344,7 @@ enyo.kind({
 			}
 		} catch (e) {}
 
-		this.$.versionText.setContent($L("Version: ") + version + " (build v213)");
+		this.$.versionText.setContent($L("Version: ") + version + " (build v214)");
 		this.$.aboutPopup.openAtCenter();
 	},
 

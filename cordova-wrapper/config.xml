@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="org.webosarchive.papyrus" android-versionCode="213" version="1.6.1" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+<widget id="org.webosarchive.papyrus" android-versionCode="214" version="1.6.1" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android" xmlns:cdv="http://cordova.apache.org/ns/1.0">
     <name>Papyrus</name>
     <description>Papyrus eReader - an open-source ePub reader, from webOS to Android</description>
     <author email="curator@webosarchive.org" href="https://github.com/codepoet80/webos-papyrus-ereader">
