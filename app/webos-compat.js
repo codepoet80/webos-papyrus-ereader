@@ -250,6 +250,16 @@
             var types = opts.fileType || this.fileType || [];
             var wantDocs = (types.indexOf('document') >= 0);
             var accept = wantDocs ? '.epub,.pdf' : '.epub';
+            // Android (Cordova) WebView: Cordova hands accept values straight to the
+            // system picker as MIME types (Intent.EXTRA_MIME_TYPES), so ".epub" matches
+            // no file and every entry is greyed out. Give it real MIME types instead.
+            // octet-stream covers providers that don't recognise .epub; Main.js
+            // handleFilePicked still filters the selection down to *.epub.
+            if (window.cordova) {
+                accept = wantDocs
+                    ? 'application/epub+zip,application/octet-stream,application/pdf'
+                    : 'application/epub+zip,application/octet-stream';
+            }
             var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
                 (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
@@ -261,7 +271,10 @@
             // File System Access API — Safari 15.2+, Chrome 86+.
             // Bypasses the hidden-input mechanism that iOS PWA silently breaks
             // (input.click() opens picker but change event never fires on iOS).
-            if (window.showOpenFilePicker) {
+            // Not in the Android (Cordova) app: WebView 13x+ exposes this API too,
+            // but its filter reaches Cordova's chooser in a form that matches no
+            // file (everything greyed out). The <input> path below works there.
+            if (window.showOpenFilePicker && !window.cordova) {
                 var pickerOpts = {
                     multiple: multiple,
                     types: [{
@@ -285,7 +298,7 @@
                 return;
             }
 
-            // Fallback: legacy hidden <input> approach — webOS, Android, Safari < 15.2
+            // Fallback: legacy hidden <input> approach — webOS, Android app, Safari < 15.2
             this._input.multiple = multiple;
             this._input.accept = accept;
             this._picking = true;

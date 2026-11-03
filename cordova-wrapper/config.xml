@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="org.webosarchive.papyrus" android-versionCode="211" version="1.6.1" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+<widget id="org.webosarchive.papyrus" android-versionCode="213" version="1.6.1" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android" xmlns:cdv="http://cordova.apache.org/ns/1.0">
     <name>Papyrus</name>
     <description>Papyrus eReader - an open-source ePub reader, from webOS to Android</description>
     <author email="curator@webosarchive.org" href="https://github.com/codepoet80/webos-papyrus-ereader">
@@ -27,6 +27,11 @@
     <platform name="android">
         <preference name="android-minSdkVersion" value="24" />
         <preference name="AndroidWindowSplashScreenBackground" value="#2c1a0e" />
+        <!-- Android 12+ splash masks this to a circle covering the middle 2/3,
+             so the square icon is pre-shrunk onto a 768px canvas to fit inside it
+             (resources/android/splash.png, made from app/icons/512.png). Without
+             this preference Cordova shows its own default robot icon. -->
+        <preference name="AndroidWindowSplashScreenAnimatedIcon" value="resources/android/splash.png" />
         <edit-config file="AndroidManifest.xml" mode="merge" target="/manifest/application">
             <application android:usesCleartextTraffic="true" />
         </edit-config>
